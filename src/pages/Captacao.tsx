@@ -42,7 +42,7 @@ function CaptacaoModal({ item, onSave, onClose, clientes }: { item?: Captacao|nu
         </div>
         <div className="flex gap-3 mt-4">
           <button onClick={onClose} className="btn-ghost flex-1 justify-center">Cancelar</button>
-          <button onClick={()=>onSave(f)} className="btn-primary flex-1 justify-center">Salvar</button>
+          <button onClick={()=>onSave({...f, canal: f.canal || undefined})} className="btn-primary flex-1 justify-center">Salvar</button>
         </div>
       </div>
     </div>

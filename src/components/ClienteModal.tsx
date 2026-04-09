@@ -118,7 +118,7 @@ export default function ClienteModal({ cliente, onSave, onClose }: Props) {
     }
     setSaving(true)
     try {
-      await onSave({ ...f, sexo:f.sexo||undefined, estado_civil:f.estado_civil||undefined, canal_origem:f.canal_origem||undefined })
+      await onSave({ ...f, sexo:f.sexo||undefined, estado_civil:(f.estado_civil||undefined) as any, canal_origem:f.canal_origem||undefined })
       // onSave closes the modal on success
     } catch (err: any) {
       // Show error inline — don't close modal

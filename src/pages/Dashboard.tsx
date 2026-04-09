@@ -8,7 +8,7 @@ import { ptBR } from 'date-fns/locale'
 import { Link } from 'react-router-dom'
 
 function StatCard({ label, value, icon: Icon, color, bg, to }: {
-  label: string; value: number; icon: React.FC<{size:number;style?:object}>; color: string; bg: string; to: string
+  label: string; value: number; icon: React.ElementType; color: string; bg: string; to: string
 }) {
   return (
     <Link to={to} className="rounded-2xl p-5 card-hover block" style={{ background:'var(--bg-card)', border:'1px solid var(--border)', textDecoration:'none' }}>
@@ -104,7 +104,7 @@ export default function Dashboard() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h2 className="text-2xl font-bold" style={{ color:'var(--text-primary)' }}>
-          Bem vindo, {user?.user_metadata?.name?.split(' ')[0] ?? 'usuário'} 👋
+          Bom dia, {user?.user_metadata?.name?.split(' ')[0] ?? 'usuário'} 👋
         </h2>
         <p className="text-sm mt-1" style={{ color:'var(--text-muted)' }}>
           {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
@@ -163,8 +163,8 @@ export default function Dashboard() {
                         {SIT_CONS_LABEL[c.situacao]}
                       </span>
                       {c.alerta_enviado_dia
-                        ? <CheckCircle2 size={14} style={{ color:'#10b981' }} title="Alerta enviado"/>
-                        : <Bell size={14} style={{ color:'#f59e0b' }} title="Alerta pendente"/>
+                        ? <CheckCircle2 size={14} style={{ color:'#10b981' }} aria-label="Alerta enviado"/>
+                        : <Bell size={14} style={{ color:'#f59e0b' }} aria-label="Alerta pendente"/>
                       }
                     </div>
                   </div>
@@ -188,7 +188,7 @@ export default function Dashboard() {
                         <span className="text-xs ml-2" style={{ color:'var(--text-muted)' }}>{formatDataHora(c.data_hora)}</span>
                       </div>
                       {!c.alerta_enviado_d1 && (
-                        <AlertTriangle size={13} style={{ color:'#f59e0b', flexShrink:0 }} title="Alerta pendente"/>
+                        <AlertTriangle size={13} style={{ color:'#f59e0b', flexShrink:0 }} aria-label="Alerta pendente"/>
                       )}
                     </div>
                   )

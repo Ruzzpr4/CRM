@@ -486,7 +486,7 @@ export default function Equipe() {
   const { toast } = useToast()
 
   const isAdmin = permissions.isAdmin
-  const isSupervisor = permissions.role === 'supervisor' || permissions.role === 'gerente'
+  const isSupervisor = permissions.role === 'supervisor' || (permissions.role as string) === 'gerente'
 
   const load = useCallback(async () => {
     setLoading(true)

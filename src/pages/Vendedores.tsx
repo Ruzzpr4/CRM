@@ -29,6 +29,7 @@ function VendedorModal({ item, todos, onSave, onClose }: {
     percentual_comissao: 0, observacoes: '',
   })
   const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
 
   useEffect(() => {
     if (item) {

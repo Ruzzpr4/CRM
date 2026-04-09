@@ -137,7 +137,7 @@ function MovimentoForm({ produto, onSave, onClose }: {
 }
 
 // ─── Upload de Planilha ──────────────────────────────────────
-function UploadModal({ onImport, onClose }: { onImport:(rows:Partial<ProdutoEstoque>[])=>Promise<void>; onClose:()=>void }) {
+function UploadModal({ onImport, onClose }: { onImport:(rows:Partial<ProdutoEstoque>[])=>Promise<{ok:number;erros:number}>; onClose:()=>void }) {
   const [file, setFile] = useState<File|null>(null)
   const [preview, setPreview] = useState<Partial<ProdutoEstoque>[]>([])
   const [loading, setLoading] = useState(false)

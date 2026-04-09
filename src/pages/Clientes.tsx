@@ -169,7 +169,7 @@ export default function Clientes() {
                       {detalhe.lead_quente && (
                         <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold hot-lead-badge"
                           style={{ background:'rgba(245,158,11,0.15)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)' }}>
-                          <Flame size={11}/> Lead Quente
+                          <Flame size={11}/> Lead com potencial
                         </span>
                       )}
                     </div>

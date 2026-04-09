@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Eye, EyeOff, Zap, Lock, Mail, User } from 'lucide-react'
+import { Eye, EyeOff, Zap, Lock, Mail } from 'lucide-react'
 import { IS_MOCK } from '../lib/api'
 
 export default function Login() {
-  const { signIn, signUp } = useAuth()
-  const [mode, setMode] = useState<'login'|'signup'>('login')
+  const { signIn } = useAuth()
+  const mode = 'login'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
+
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string|null>(null)
@@ -16,14 +16,8 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(null); setSuccess(null); setLoading(true)
-    if (mode === 'login') {
-      const { error } = await signIn(email, password)
-      if (error) setError(error)
-    } else {
-      const { error } = await signUp(email, password, name)
-      if (error) setError(error)
-      else if (!IS_MOCK) setSuccess('Conta criada! Verifique seu e-mail.')
-    }
+    const { error } = await signIn(email, password)
+    if (error) setError(error)
     setLoading(false)
   }
 
@@ -37,7 +31,7 @@ export default function Login() {
 
         <div className="relative z-10 flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background:'var(--accent)' }}><Zap size={18} color="white"/></div>
-          <span className="text-lg font-bold text-white">Projeto CRM</span>
+          <span className="text-lg font-bold text-white">ProspectCRM</span>
         </div>
 
         <div className="relative z-10 space-y-6">
@@ -72,6 +66,9 @@ export default function Login() {
               🧪 Modo demonstração ativo — use qualquer e-mail e senha para entrar
             </p>
           )}
+          {!IS_MOCK && (
+            <p className="text-xs" style={{ color:'#8b87b8' }}>🔒 Dados protegidos com Row Level Security (Supabase)</p>
+          )}
         </div>
       </div>
 
@@ -80,28 +77,20 @@ export default function Login() {
         <div className="w-full max-w-md animate-fade-in">
           <div className="flex items-center gap-3 mb-8 lg:hidden">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background:'var(--accent)' }}><Zap size={18} color="white"/></div>
-            <span className="text-lg font-bold" style={{ color:'var(--text-primary)' }}>Projeto CRM</span>
+            <span className="text-lg font-bold" style={{ color:'var(--text-primary)' }}>ProspectCRM</span>
           </div>
 
           <div className="mb-8">
             <h2 className="text-2xl font-bold mb-1" style={{ color:'var(--text-primary)' }}>
-              {mode==='login'?'Bem-vindo de volta':'Criar conta'}
+              Bem-vindo de volta
             </h2>
             <p style={{ color:'var(--text-muted)', fontSize:14 }}>
-              {mode==='login'?'Entre para acessar o CRM':'Preencha os dados para começar'}
+              Entre para acessar o CRM
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode==='signup' && (
-              <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color:'var(--text-secondary)' }}>Nome</label>
-                <div className="relative">
-                  <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color:'var(--text-muted)' }}/>
-                  <input type="text" value={name} onChange={e=>setName(e.target.value)} required placeholder="Seu nome completo" className="input-field" style={{paddingLeft:'2.25rem'}}/>
-                </div>
-              </div>
-            )}
+
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color:'var(--text-secondary)' }}>E-mail</label>
               <div className="relative">
@@ -124,16 +113,12 @@ export default function Login() {
             {error && <div className="rounded-xl p-3 text-sm" style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.2)', color:'#f87171' }}>{error}</div>}
             {success && <div className="rounded-xl p-3 text-sm" style={{ background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.2)', color:'#34d399' }}>{success}</div>}
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center" style={{ opacity:loading?.6:1 }}>
-              {loading?'Aguarde...':(mode==='login'?'Entrar':'Criar conta')}
+              {loading?'Aguarde...':'Entrar'}
             </button>
           </form>
 
           <p className="text-center mt-6 text-sm" style={{ color:'var(--text-muted)' }}>
-            {mode==='login'?'Não tem conta? ':'Já tem conta? '}
-            <button onClick={()=>{setMode(mode==='login'?'signup':'login');setError(null);setSuccess(null)}}
-              className="font-semibold" style={{ color:'var(--accent)', background:'none', border:'none', cursor:'pointer' }}>
-              {mode==='login'?'Criar conta':'Entrar'}
-            </button>
+            Acesso restrito. Solicite seu acesso ao administrador.
           </p>
         </div>
       </div>

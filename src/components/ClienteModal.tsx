@@ -231,7 +231,7 @@ export default function ClienteModal({ cliente, onSave, onClose }: Props) {
                 <div style={{ gridColumn:'1/-1', display:'flex', gap:20 }}>
                   <label style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer' }}>
                     <input type="checkbox" checked={f.lead_quente} onChange={e=>set('lead_quente',e.target.checked)} style={{ width:15, height:15, accentColor:'#f59e0b' }}/>
-                    <span style={{ fontSize:13, color:f.lead_quente?'#f59e0b':'var(--text-secondary)' }}>🔥 Lead Quente</span>
+                    <span style={{ fontSize:13, color:f.lead_quente?'#f59e0b':'var(--text-secondary)' }}>Lead com potencial</span>
                   </label>
                   <label style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer' }}>
                     <input type="checkbox" checked={f.consentimento_lgpd} onChange={e=>set('consentimento_lgpd',e.target.checked)} style={{ width:15, height:15, accentColor:'var(--accent)' }}/>

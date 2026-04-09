@@ -104,7 +104,7 @@ export default function Dashboard() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h2 className="text-2xl font-bold" style={{ color:'var(--text-primary)' }}>
-          Bom dia, {user?.user_metadata?.name?.split(' ')[0] ?? 'usuário'} 👋
+          Bem vindo, {user?.user_metadata?.name?.split(' ')[0] ?? 'usuário'} 👋
         </h2>
         <p className="text-sm mt-1" style={{ color:'var(--text-muted)' }}>
           {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
@@ -114,7 +114,7 @@ export default function Dashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard label="Clientes Ativos"    value={stats.totalClientes}    icon={Users}        color="#4f56f7" bg="rgba(79,86,247,0.12)"  to="/clientes"/>
-        <StatCard label="Leads Quentes"      value={stats.leadsQuentes}     icon={Flame}        color="#f59e0b" bg="rgba(245,158,11,0.12)" to="/clientes"/>
+        <StatCard label="Leads com potencial"      value={stats.leadsQuentes}     icon={Flame}        color="#f59e0b" bg="rgba(245,158,11,0.12)" to="/clientes"/>
         <StatCard label="Alertas Pendentes"  value={stats.alertasPendentes} icon={Bell}         color="#ec4899" bg="rgba(236,72,153,0.12)" to="/agenda"/>
         <StatCard label="Consultas Hoje"     value={consultasHoje.length}   icon={CalendarDays} color="#10b981" bg="rgba(16,185,129,0.12)" to="/agenda"/>
       </div>
@@ -137,7 +137,7 @@ export default function Dashboard() {
 
           {consultasHoje.length === 0 ? (
             <div className="flex items-center justify-center h-24 rounded-xl" style={{ background:'var(--bg-elevated)', border:'1px dashed var(--border)' }}>
-              <p className="text-sm" style={{ color:'var(--text-muted)' }}>Nenhuma consulta hoje 🎉</p>
+              <p className="text-sm" style={{ color:'var(--text-muted)' }}>Nenhuma consulta hoje</p>
             </div>
           ) : (
             <div className="space-y-3">

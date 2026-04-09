@@ -114,11 +114,29 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
   }
 
   useEffect(() => {
-    import('../lib/supabase').then(({supabase})=>{
-      supabase.from('funcionarios').select('*').eq('ativo',true).then(({data})=>{
-        const atuais = new Set(membrosAtuais.map(m=>m.user_id))
-        setTodos(((data??[]) as Funcionario[]).filter(f=>!atuais.has(f.user_id)))
-      })
+    import('../lib/supabase').then(async ({supabase})=>{
+      const atuais = new Set(membrosAtuais.map(m=>m.user_id))
+      const { data: funcs } = await supabase.from('funcionarios').select('*').eq('ativo',true)
+      const lista = ((funcs??[]) as Funcionario[]).filter(f=>!atuais.has(f.user_id))
+
+      // Inclui o admin na lista se ainda nao estiver na equipe
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user && !atuais.has(user.id) && !lista.find(f=>f.user_id===user.id)) {
+        const adminEntry = {
+          id: user.id,
+          user_id: user.id,
+          owner_id: user.id,
+          nome: user.user_metadata?.name ?? user.email ?? 'Administrador',
+          email: user.email ?? '',
+          role: 'admin',
+          cargo: 'admin',
+          ativo: true,
+          created_at: '',
+        } as any
+        lista.unshift(adminEntry)
+      }
+
+      setTodos(lista)
     })
   }, [membrosAtuais])
 
@@ -260,7 +278,7 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
     setSaving(false)
   }
 
-  const rolesDisponiveis: FuncionarioRole[] = ['vendedor','visualizador']
+  const rolesDisponiveis: FuncionarioRole[] = ['supervisor','vendedor','visualizador']
 
   return (
     <Modal title={`Adicionar à ${equipe.nome}`} onClose={onClose} maxWidth={500}

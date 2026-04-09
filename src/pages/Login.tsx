@@ -31,7 +31,7 @@ export default function Login() {
 
         <div className="relative z-10 flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background:'var(--accent)' }}><Zap size={18} color="white"/></div>
-          <span className="text-lg font-bold text-white">ProspectCRM</span>
+          <span className="text-lg font-bold text-white">Projeto CRM</span>
         </div>
 
         <div className="relative z-10 space-y-6">
@@ -76,7 +76,7 @@ export default function Login() {
         <div className="w-full max-w-md animate-fade-in">
           <div className="flex items-center gap-3 mb-8 lg:hidden">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background:'var(--accent)' }}><Zap size={18} color="white"/></div>
-            <span className="text-lg font-bold" style={{ color:'var(--text-primary)' }}>ProspectCRM</span>
+            <span className="text-lg font-bold" style={{ color:'var(--text-primary)' }}>Projeto CRM</span>
           </div>
 
           <div className="mb-8">

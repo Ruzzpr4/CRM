@@ -182,12 +182,13 @@ export const consultasApi = {
       }) ?? null
     }
     const { supabase } = await getSB()
-    const { data } = await supabase.from('consultas')
+    let q = supabase.from('consultas')
       .select('*').eq('vendedor_id', vendedor_id)
       .not('situacao', 'in', '("cancelada","faltou")')
-      .neq('id', excludeId ?? '')
       .gte('data_hora', new Date(inicio.getTime() - 4*3600000).toISOString())
       .lte('data_hora', fim.toISOString())
+    if (excludeId) q = q.neq('id', excludeId)
+    const { data } = await q
     const conflito = (data ?? []).find((c: Consulta) => {
       const cIni = new Date(c.data_hora)
       const cFim = new Date(cIni.getTime() + (c.duracao_min ?? 60) * 60000)

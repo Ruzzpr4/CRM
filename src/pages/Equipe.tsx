@@ -164,20 +164,12 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
       .eq('org_id', resolvedOrgId).eq('user_id', userId).maybeSingle()
 
     if (existing) {
-      // Update via admin API (PATCH)
-      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-      const SERVICE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_KEY
-      if (SERVICE_KEY && SERVICE_KEY !== 'your-service-role-key-here') {
-        await fetch(`${SUPABASE_URL}/rest/v1/org_membros?id=eq.${existing.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type':'application/json', 'apikey':SERVICE_KEY, 'Authorization':`Bearer ${SERVICE_KEY}`, 'Prefer':'return=minimal' },
-          body: JSON.stringify({ equipe_id: equipe.id, role })
-        })
-      } else {
-        // Fallback: try regular client
-        const { error } = await supabase.from('org_membros').update({ equipe_id: equipe.id, role }).eq('id', existing.id)
-        if (error) throw new Error(error.message)
-      }
+      // Update via Edge Function (service key fica no servidor)
+      const err = await adminInsert('org_membros', {
+        org_id: resolvedOrgId, user_id: userId, role,
+        equipe_id: equipe.id, vendedor_id: vendedorId ?? null, ativo: true
+      })
+      if (err) throw new Error(err)
     } else {
       const err = await adminInsert('org_membros', {
         org_id: resolvedOrgId, user_id: userId, role,

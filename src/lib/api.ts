@@ -193,13 +193,9 @@ export const consultasApi = {
       .lte('data_hora', janelaFim)
     if (excludeId) q = q.neq('id', excludeId)
     const { data } = await q
-    console.log('[checkConflito] vendedor_id:', vendedor_id)
-    console.log('[checkConflito] novo inicio:', inicio.toISOString(), 'fim:', fim.toISOString())
-    console.log('[checkConflito] consultas encontradas:', data?.length, data?.map((c: any) => ({ id: c.id, data_hora: c.data_hora, duracao_min: c.duracao_min, vendedor_id: c.vendedor_id })))
     const conflito = (data ?? []).find((c: Consulta) => {
       const cIni = new Date(c.data_hora)
       const cFim = new Date(cIni.getTime() + (c.duracao_min ?? 60) * 60000)
-      console.log('[checkConflito] comparando com:', cIni.toISOString(), '-', cFim.toISOString(), '| solapa?', inicio < cFim && fim > cIni)
       return inicio < cFim && fim > cIni
     })
     return (conflito as Consulta) ?? null

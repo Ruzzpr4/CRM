@@ -211,7 +211,7 @@ export default function ConsultaModal({ consulta, clientes, onSave, onClose }: P
                 </select>
               </Field>
               <Field label="Duração (min)">
-                <input type="number" min={15} max={480} step={15} value={f.duracao_min} onChange={e => set('duracao_min', e.target.value)} className="input-field" />
+                <input type="number" min={15} max={480} step={15} value={f.duracao_min} onChange={e => set('duracao_min', Number(e.target.value) || 60)} className="input-field" />
               </Field>
               <Field label="Modalidade">
                 <select value={f.modalidade} onChange={e => set('modalidade', e.target.value)} className="input-field" style={{ appearance: 'none' }}>

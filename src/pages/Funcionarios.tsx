@@ -7,7 +7,6 @@ import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
 import { Plus, Search, Mail, Phone, Pencil, Shield, CheckCircle, XCircle, Key, Copy, CheckCircle2, Users, RefreshCw } from 'lucide-react'
-import { adminCreateUser, adminUpdateUserPassword, adminDeleteUser } from '../lib/authAdmin'
 
 const MODULOS = [
   { key:'clientes',     label:'Clientes',     desc:'Ver e gerenciar clientes' },
@@ -183,7 +182,7 @@ function ResetSenhaModal({ func, onClose }: { func:Funcionario; onClose:()=>void
   const handleReset = async () => {
     setSaving(true)
     try {
-      
+      const { adminUpdateUserPassword } = await import('../lib/authAdmin')
       await adminUpdateUserPassword(func.user_id, novaSenha)
       setDone(true)
       toast.success('Senha redefinida!')
@@ -255,7 +254,7 @@ export default function Funcionarios() {
 
   const handleSave = async (data: Partial<Funcionario> & { senha?: string }) => {
     const { supabase } = await import('../lib/supabase')
-    
+    const { adminCreateUser } = await import('../lib/authAdmin')
     const adminId = ownerId || user?.id || ''
 
     if (editing) {
@@ -295,7 +294,7 @@ export default function Funcionarios() {
         ativo: true, owner_id: adminId
       })
       if (funcErr) {
-        
+        const { adminDeleteUser } = await import('../lib/authAdmin')
         await adminDeleteUser(newUserId)
         throw new Error('Erro no banco: ' + funcErr.message)
       }
@@ -344,7 +343,6 @@ export default function Funcionarios() {
         <Shield size={14} style={{color:'var(--accent)',flexShrink:0,marginTop:1}}/>
         <div>
           Cada funcionário tem login próprio (e-mail + senha). <strong style={{color:'var(--text-primary)'}}>Copie a senha</strong> ao criar — ela não será exibida depois.
-          Se a criação falhar, certifique-se de ter executado: <code style={{background:'var(--bg-raised)',padding:'1px 6px',borderRadius:4}}>npx supabase functions deploy invite-funcionario --no-verify-jwt</code>
         </div>
       </div>
 

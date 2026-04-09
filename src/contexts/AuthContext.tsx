@@ -53,13 +53,11 @@ export function AuthProvider({ children }: { children:ReactNode }) {
       const { supabase } = await import('../lib/supabase')
 
       // Check if this user has a funcionarios record owned by someone else
-      const { data: funcs } = await supabase.from('funcionarios')
+      const { data: func } = await supabase.from('funcionarios')
         .select('role, owner_id, vendedor_id')
         .eq('user_id', u.id)
         .eq('ativo', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-      const func = funcs?.[0] ?? null
+        .maybeSingle()
 
       if (func?.owner_id && func.owner_id !== u.id) {
         // Is a funcionário of another admin

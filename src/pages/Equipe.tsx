@@ -5,7 +5,6 @@ import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import { ROLE_LABELS, FuncionarioRole } from '../types/funcionario'
 import { Plus, Users, Crown, Pencil, Trash2, UserPlus, X, Search, ChevronDown, ChevronRight, Lock } from 'lucide-react'
-import { adminInsert, adminCreateUser, adminDeleteUser } from '../lib/authAdmin'
 
 interface Equipe { id:string; org_id:string; nome:string; descricao?:string; cor:string; created_at:string }
 interface OrgMembro { id:string; org_id:string; user_id:string; role:FuncionarioRole; vendedor_id?:string; equipe_id?:string; ativo:boolean; funcionarios?:{nome:string;email:string} }
@@ -156,7 +155,7 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
 
   const addToTeam = async (userId: string, role: FuncionarioRole, vendedorId?: string) => {
     const { supabase } = await import('../lib/supabase')
-    
+    const { adminInsert } = await import('../lib/authAdmin')
     const { data: { user } } = await supabase.auth.getUser()
     const resolvedOrgId = await resolveOrgId(supabase, user?.id ?? '')
     if (!resolvedOrgId) throw new Error('Organização não encontrada')
@@ -165,12 +164,20 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
       .eq('org_id', resolvedOrgId).eq('user_id', userId).maybeSingle()
 
     if (existing) {
-      // Update via Edge Function (service key fica no servidor)
-      const err = await adminInsert('org_membros', {
-        org_id: resolvedOrgId, user_id: userId, role,
-        equipe_id: equipe.id, vendedor_id: vendedorId ?? null, ativo: true
-      })
-      if (err) throw new Error(err)
+      // Update via admin API (PATCH)
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+      const SERVICE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_KEY
+      if (SERVICE_KEY && SERVICE_KEY !== 'your-service-role-key-here') {
+        await fetch(`${SUPABASE_URL}/rest/v1/org_membros?id=eq.${existing.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type':'application/json', 'apikey':SERVICE_KEY, 'Authorization':`Bearer ${SERVICE_KEY}`, 'Prefer':'return=minimal' },
+          body: JSON.stringify({ equipe_id: equipe.id, role })
+        })
+      } else {
+        // Fallback: try regular client
+        const { error } = await supabase.from('org_membros').update({ equipe_id: equipe.id, role }).eq('id', existing.id)
+        if (error) throw new Error(error.message)
+      }
     } else {
       const err = await adminInsert('org_membros', {
         org_id: resolvedOrgId, user_id: userId, role,
@@ -203,7 +210,7 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
     setSaving(true)
     setFormError('')
     try {
-      
+      const { adminCreateUser } = await import('../lib/authAdmin')
       const { supabase } = await import('../lib/supabase')
       const { data: { user } } = await supabase.auth.getUser()
 
@@ -219,10 +226,32 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
       const orgIdResolved = orgs?.[0]?.id
 
       // Insert funcionario using admin client to bypass RLS
+      const { adminInsert, adminDeleteUser } = await import('../lib/authAdmin')
       
-      
-      // vendedor_id sera criado pela Edge Function invite-funcionario
+      // Auto-create vendedor record if role is vendedor/supervisor
       let vendedorId: string | null = null
+      if (['vendedor', 'supervisor'].includes(novo.role)) {
+        const vendRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/vendedores`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_SERVICE_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_KEY}`,
+            'Prefer': 'return=representation',
+          },
+          body: JSON.stringify({
+            nome: novo.nome.trim(),
+            email: novo.email.trim(),
+            cargo: novo.role === 'supervisor' ? 'supervisor' : 'vendedor',
+            situacao: true,
+            user_id: adminId,
+          }),
+        })
+        if (vendRes.ok) {
+          const vendData = await vendRes.json()
+          vendedorId = vendData?.[0]?.id ?? null
+        }
+      }
 
       const funcInsertErr = await adminInsert('funcionarios', {
         user_id: newUserId, nome: novo.nome.trim(), email: novo.email.trim(),

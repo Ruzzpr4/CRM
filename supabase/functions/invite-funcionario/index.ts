@@ -50,10 +50,21 @@ Deno.serve(async (req: Request) => {
       orgId = newOrg?.id
     }
 
+    // Auto-create vendedor record for vendedor/supervisor roles
+    let resolvedVendedorId = vendedor_id ?? null
+    if (!resolvedVendedorId && ['vendedor', 'supervisor'].includes(role ?? 'vendedor')) {
+      const { data: newVend } = await admin.from('vendedores').insert({
+        nome: nome.trim(), email: email.trim(),
+        cargo: role === 'supervisor' ? 'supervisor' : 'vendedor',
+        situacao: true, user_id: owner_id,
+      }).select('id').single()
+      resolvedVendedorId = newVend?.id ?? null
+    }
+
     // Create funcionario record
     const { error: funcErr } = await admin.from('funcionarios').insert({
       user_id: userId, nome: nome.trim(), email: email.trim(),
-      role: role ?? 'vendedor', vendedor_id: vendedor_id ?? null,
+      role: role ?? 'vendedor', vendedor_id: resolvedVendedorId,
       ativo: true, owner_id,
     })
     if (funcErr) {
@@ -61,16 +72,16 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Erro no banco: ' + funcErr.message }), { status: 400, headers: cors })
     }
 
-    // Add to org_membros for RLS (ignore unique constraint errors)
+    // Add to org_membros
     if (orgId) {
       await admin.from('org_membros').upsert({
         org_id: orgId, user_id: userId, role: role ?? 'vendedor',
-        vendedor_id: vendedor_id ?? null, ativo: true,
+        vendedor_id: resolvedVendedorId, ativo: true,
       }, { onConflict: 'org_id,user_id' })
     }
 
     return new Response(
-      JSON.stringify({ success: true, user_id: userId }),
+      JSON.stringify({ success: true, user_id: userId, vendedor_id: resolvedVendedorId }),
       { headers: { ...cors, 'Content-Type': 'application/json' } }
     )
   } catch (err) {

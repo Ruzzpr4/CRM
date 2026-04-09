@@ -221,30 +221,8 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
       // Insert funcionario using admin client to bypass RLS
       
       
-      // Auto-create vendedor record if role is vendedor/supervisor
+      // vendedor_id sera criado pela Edge Function invite-funcionario
       let vendedorId: string | null = null
-      if (['vendedor', 'supervisor'].includes(novo.role)) {
-        const vendRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/vendedores`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_SERVICE_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_KEY}`,
-            'Prefer': 'return=representation',
-          },
-          body: JSON.stringify({
-            nome: novo.nome.trim(),
-            email: novo.email.trim(),
-            cargo: novo.role === 'supervisor' ? 'supervisor' : 'vendedor',
-            situacao: true,
-            user_id: adminId,
-          }),
-        })
-        if (vendRes.ok) {
-          const vendData = await vendRes.json()
-          vendedorId = vendData?.[0]?.id ?? null
-        }
-      }
 
       const funcInsertErr = await adminInsert('funcionarios', {
         user_id: newUserId, nome: novo.nome.trim(), email: novo.email.trim(),

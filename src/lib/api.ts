@@ -182,16 +182,21 @@ export const consultasApi = {
       }) ?? null
     }
     const { supabase } = await getSB()
+    // Busca consultas numa janela de 12h ao redor do horario novo
+    // A sobreposição real é calculada em JS: A solapa B se A.inicio < B.fim E A.fim > B.inicio
+    const janelaInicio = new Date(inicio.getTime() - 12 * 3600000).toISOString()
+    const janelaFim = new Date(fim.getTime() + 12 * 3600000).toISOString()
     let q = supabase.from('consultas')
       .select('*').eq('vendedor_id', vendedor_id)
       .not('situacao', 'in', '("cancelada","faltou")')
-      .gte('data_hora', new Date(inicio.getTime() - 4*3600000).toISOString())
-      .lte('data_hora', fim.toISOString())
+      .gte('data_hora', janelaInicio)
+      .lte('data_hora', janelaFim)
     if (excludeId) q = q.neq('id', excludeId)
     const { data } = await q
     const conflito = (data ?? []).find((c: Consulta) => {
       const cIni = new Date(c.data_hora)
       const cFim = new Date(cIni.getTime() + (c.duracao_min ?? 60) * 60000)
+      // Sobreposição: novo começa antes do existente terminar E novo termina depois do existente começar
       return inicio < cFim && fim > cIni
     })
     return (conflito as Consulta) ?? null

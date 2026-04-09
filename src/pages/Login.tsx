@@ -58,18 +58,6 @@ export default function Login() {
             ))}
           </div>
         </div>
-
-        <div className="relative z-10 rounded-2xl p-4 flex items-center gap-4"
-          style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.06)' }}>
-          {IS_MOCK && (
-            <p className="text-xs" style={{ color:'#f59e0b' }}>
-              🧪 Modo demonstração ativo — use qualquer e-mail e senha para entrar
-            </p>
-          )}
-          {!IS_MOCK && (
-            <p className="text-xs" style={{ color:'#8b87b8' }}>🔒 Dados protegidos com Row Level Security (Supabase)</p>
-          )}
-        </div>
       </div>
 
       {/* Right */}

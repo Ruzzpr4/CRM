@@ -98,7 +98,8 @@ export default function ConsultaModal({ consulta, clientes, onSave, onClose }: P
     setSaving(true)
     try {
       const data_hora = new Date(`${f.data}T${f.hora}:00`).toISOString()
-      await onSave({ ...f, data_hora, duracao_min: Number(f.duracao_min), vendedor_id: f.vendedor_id || undefined })
+      const { data: _d, hora: _h, ...rest } = f
+      await onSave({ ...rest, data_hora, duracao_min: Number(f.duracao_min), vendedor_id: f.vendedor_id || undefined, consultor_id: undefined })
     } catch (err: any) {
       setFormError('Erro ao salvar: ' + (err?.message ?? 'Tente novamente.'))
     } finally {

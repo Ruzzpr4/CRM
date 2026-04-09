@@ -235,7 +235,7 @@ export default function ClienteModal({ cliente, onSave, onClose }: Props) {
                   </label>
                   <label style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer' }}>
                     <input type="checkbox" checked={f.consentimento_lgpd} onChange={e=>set('consentimento_lgpd',e.target.checked)} style={{ width:15, height:15, accentColor:'var(--accent)' }}/>
-                    <span style={{ fontSize:13, color:'var(--text-secondary)' }}>✅ Consentimento LGPD</span>
+                    <span style={{ fontSize:13, color:'var(--text-secondary)' }}>Cliente Ativo</span>
                   </label>
                 </div>
               </div>

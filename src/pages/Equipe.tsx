@@ -5,6 +5,7 @@ import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import { ROLE_LABELS, FuncionarioRole } from '../types/funcionario'
 import { Plus, Users, Crown, Pencil, Trash2, UserPlus, X, Search, ChevronDown, ChevronRight, Lock } from 'lucide-react'
+import { adminInsert, adminCreateUser, adminDeleteUser } from '../lib/authAdmin'
 
 interface Equipe { id:string; org_id:string; nome:string; descricao?:string; cor:string; created_at:string }
 interface OrgMembro { id:string; org_id:string; user_id:string; role:FuncionarioRole; vendedor_id?:string; equipe_id?:string; ativo:boolean; funcionarios?:{nome:string;email:string} }
@@ -155,7 +156,7 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
 
   const addToTeam = async (userId: string, role: FuncionarioRole, vendedorId?: string) => {
     const { supabase } = await import('../lib/supabase')
-    const { adminInsert } = await import('../lib/authAdmin')
+    
     const { data: { user } } = await supabase.auth.getUser()
     const resolvedOrgId = await resolveOrgId(supabase, user?.id ?? '')
     if (!resolvedOrgId) throw new Error('Organização não encontrada')
@@ -202,7 +203,7 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
     setSaving(true)
     setFormError('')
     try {
-      const { adminCreateUser } = await import('../lib/authAdmin')
+      
       const { supabase } = await import('../lib/supabase')
       const { data: { user } } = await supabase.auth.getUser()
 
@@ -218,7 +219,7 @@ function AddMembroModal({ equipe, orgId, membrosAtuais, podeGerenciarEquipe, onS
       const orgIdResolved = orgs?.[0]?.id
 
       // Insert funcionario using admin client to bypass RLS
-      const { adminInsert, adminDeleteUser } = await import('../lib/authAdmin')
+      
       
       // Auto-create vendedor record if role is vendedor/supervisor
       let vendedorId: string | null = null

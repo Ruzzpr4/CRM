@@ -57,6 +57,17 @@ export default function CaptacaoPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Captacao|null>(null)
 
+  const [dragId, setDragId] = useState<string|null>(null)
+
+  const handleDrop = async (status: CaptacaoSituacao) => {
+    if (!dragId) return
+    const lead = leads.find(l => l.id === dragId)
+    if (!lead || lead.situacao === status) { setDragId(null); return }
+    await captacaoApi.update(dragId, { situacao: status })
+    setDragId(null)
+    load()
+  }
+
   const load = useCallback(async () => {
     setLoading(true)
     
@@ -101,14 +112,21 @@ export default function CaptacaoPage() {
             const items = byStatus(status)
             return (
               <div key={status} className="flex flex-col flex-shrink-0 rounded-2xl overflow-hidden"
-                style={{ width:260, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
+                style={{ width:260, background:'var(--bg-card)', border:'1px solid var(--border)', transition:'box-shadow .15s' }}
+                onDragOver={e=>{e.preventDefault()}}
+                onDragEnter={e=>{(e.currentTarget as HTMLElement).style.boxShadow='0 0 0 2px var(--accent)'}}
+                onDragLeave={e=>{(e.currentTarget as HTMLElement).style.boxShadow='none'}}
+                onDrop={e=>{(e.currentTarget as HTMLElement).style.boxShadow='none';handleDrop(status)}}>
                 <div className="px-4 py-3 flex items-center justify-between flex-shrink-0" style={{ borderBottom:'1px solid var(--border)' }}>
                   <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold border ${SIT_CAP_COLOR[status]}`}>{SIT_CAP_LABEL[status]}</span>
                   <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style={{ background:'var(--bg-elevated)', color:'var(--text-muted)' }}>{items.length}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   {items.map(lead => (
-                    <div key={lead.id} className="rounded-xl p-3" style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)' }}>
+                    <div key={lead.id} draggable
+                      onDragStart={()=>setDragId(lead.id)}
+                      onDragEnd={()=>setDragId(null)}
+                      className="rounded-xl p-3" style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', cursor:'grab', opacity: dragId===lead.id ? 0.5 : 1, transition:'opacity .15s' }}>
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <p className="text-sm font-semibold" style={{ color:'var(--text-primary)' }}>{lead.nome ?? 'Sem nome'}</p>

@@ -5,23 +5,28 @@ const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Tabelas permitidas para insert via esta função
 const ALLOWED_TABLES = ['org_membros', 'funcionarios']
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   try {
     const authHeader = req.headers.get('Authorization') ?? ''
+    if (!authHeader.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Token não fornecido' }), { status: 401, headers: cors })
+    }
+
+    // Verifica o caller com o token JWT recebido
     const callerClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     )
-    const { data: { user: caller } } = await callerClient.auth.getUser()
-    if (!caller) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: cors })
+    const { data: { user: caller }, error: authError } = await callerClient.auth.getUser()
+    if (authError || !caller) {
+      return new Response(JSON.stringify({ error: 'Não autorizado: ' + (authError?.message ?? 'sem usuário') }), { status: 401, headers: cors })
+    }
 
     const { table, data } = await req.json()
-
     if (!ALLOWED_TABLES.includes(table)) {
       return new Response(JSON.stringify({ error: 'Tabela não permitida' }), { status: 403, headers: cors })
     }

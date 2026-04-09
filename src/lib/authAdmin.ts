@@ -4,24 +4,10 @@
  */
 import { supabase } from './supabase'
 
-const FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL?.replace('.supabase.co', '.supabase.co/functions/v1') ?? ''
-
 async function callFunction(name: string, body: Record<string, unknown>) {
-  const { data: { session } } = await supabase.auth.getSession()
-  const token = session?.access_token ?? ''
-
-  const res = await fetch(`${FUNCTIONS_URL}/${name}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
-    },
-    body: JSON.stringify(body),
-  })
-
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error ?? 'Erro na função do servidor')
+  const { data, error } = await supabase.functions.invoke(name, { body })
+  if (error) throw new Error(error.message ?? 'Erro na função do servidor')
+  if (data?.error) throw new Error(data.error)
   return data
 }
 

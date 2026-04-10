@@ -115,7 +115,7 @@ export default function Metas() {
     }
 
     // Get vendedores filtered by equipe
-    let v = await vendedoresApi.list({situacao:true})
+    let v = await vendedoresApi.list({situacao:true, equipe_id: equipeId || undefined})
     if (!permissions.isAdmin) {
       if (permissions.role === 'supervisor' && equipeVendedorIds.length) {
         v = v.filter(vend => equipeVendedorIds.includes(vend.id))

@@ -308,7 +308,7 @@ export const captacaoApi = {
 
 // ─── VENDEDORES ──────────────────────────────────────────────
 export const vendedoresApi = {
-  async list(filters: { situacao?: boolean; search?: string } = {}): Promise<Vendedor[]> {
+  async list(filters: { situacao?: boolean; search?: string; equipe_id?: string | null } = {}): Promise<Vendedor[]> {
     if (IS_MOCK) {
       let data = load<Vendedor>('crm_vendedores', MOCK_VENDEDORES)
       if (filters.situacao !== undefined) data = data.filter(v => v.situacao === filters.situacao)
@@ -316,6 +316,19 @@ export const vendedoresApi = {
       return data.sort((a,b) => a.nome.localeCompare(b.nome))
     }
     const { supabase, userId } = await getSB()
+
+    // Se equipe_id fornecido, filtra apenas vendedores dessa equipe via org_membros
+    if (filters.equipe_id) {
+      const { data: membros } = await supabase.from('org_membros')
+        .select('vendedor_id').eq('equipe_id', filters.equipe_id).eq('ativo', true)
+      const vendedorIds = (membros ?? []).map((m: any) => m.vendedor_id).filter(Boolean)
+      if (!vendedorIds.length) return []
+      let q = supabase.from('vendedores').select('*').in('id', vendedorIds).order('nome')
+      if (filters.situacao !== undefined) q = q.eq('situacao', filters.situacao)
+      const { data } = await q
+      return (data ?? []) as Vendedor[]
+    }
+
     let q = supabase.from('vendedores').select('*').order('nome')
     if (filters.situacao !== undefined) q = q.eq('situacao', filters.situacao)
     if (filters.search) q = q.ilike('nome', `%${filters.search}%`)

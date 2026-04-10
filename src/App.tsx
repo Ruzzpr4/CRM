@@ -15,6 +15,10 @@ import Estoque from './pages/Estoque'
 import Funcionarios from './pages/Funcionarios'
 import Configuracoes from './pages/Configuracoes'
 import Vendas from './pages/Vendas'
+import Financeiro from './pages/Financeiro'
+import Comissoes from './pages/Comissoes'
+import Pedidos from './pages/Pedidos'
+import Ponto from './pages/Ponto'
 
 function Guard({ children }: { children: React.ReactNode }) {
   const { user, loading, permissionsReady } = useAuth()
@@ -44,6 +48,10 @@ function AppRoutes() {
         <Route path="estoque" element={<Estoque/>}/>
         <Route path="funcionarios" element={<Funcionarios/>}/>
         <Route path="configuracoes" element={<Configuracoes/>}/>
+        <Route path="financeiro" element={<Financeiro/>}/>
+        <Route path="comissoes" element={<Comissoes/>}/>
+        <Route path="pedidos" element={<Pedidos/>}/>
+        <Route path="ponto" element={<Ponto/>}/>
       </Route>
       <Route path="*" element={<Navigate to="/" replace/>}/>
     </Routes>

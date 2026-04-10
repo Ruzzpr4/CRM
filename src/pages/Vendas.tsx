@@ -291,7 +291,7 @@ export default function Vendas() {
     }
     const {data} = await q
     setVendas((data??[]) as Venda[])
-    const [c,v,p] = await Promise.all([clientesApi.list(), vendedoresApi.list(), estoqueApi.listProdutos()])
+    const [c,v,p] = await Promise.all([clientesApi.list(), vendedoresApi.list({ equipe_id: equipeId || undefined }), estoqueApi.listProdutos()])
     setClientes(c); setVendedores(v); setProdutos(p)
     setLoading(false)
   }, [ownerId, filtroStatus, vendedorId, permissions])

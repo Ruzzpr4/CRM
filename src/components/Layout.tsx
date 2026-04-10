@@ -2,19 +2,23 @@ import { useState } from 'react'
 import { Outlet, NavLink, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
-import { Zap, LayoutDashboard, Users, CalendarDays, MessageSquareText, Filter, Settings, LogOut, ChevronRight, Sun, Moon, Menu, UserCheck, Target, Package, UsersRound, ShoppingBag } from 'lucide-react'
+import { Zap, LayoutDashboard, Users, CalendarDays, MessageSquareText, Filter, Settings, LogOut, ChevronRight, Sun, Moon, Menu, UserCheck, Target, Package, UsersRound, ShoppingBag, DollarSign, Award, ShoppingCart, Clock } from 'lucide-react'
 
 const ALL_NAV = [
-  { to:'/',             icon:LayoutDashboard,   label:'Dashboard',    exact:true,  perm:null },
-  { to:'/clientes',    icon:Users,             label:'Clientes',     perm:'clientes' },
-  { to:'/agenda',      icon:CalendarDays,      label:'Agenda',       perm:'agenda' },
-  { to:'/historico',   icon:MessageSquareText, label:'Histórico',    perm:'historico' },
-  { to:'/vendas',      icon:ShoppingBag,       label:'Vendas',       perm:'vendas' },
-  { to:'/equipe',      icon:UserCheck,         label:'Equipe',       perm:'equipe' },
-  { to:'/metas',       icon:Target,            label:'Metas',        perm:'metas' },
-  { to:'/captacao',    icon:Filter,            label:'Captação',     perm:'captacao' },
-  { to:'/estoque',     icon:Package,           label:'Estoque',      perm:'estoque' },
-  { to:'/funcionarios',icon:UsersRound,        label:'Funcionários', perm:'funcionarios' },
+  { to:'/',              icon:LayoutDashboard,   label:'Dashboard',    exact:true,  perm:null },
+  { to:'/clientes',     icon:Users,             label:'Clientes',     perm:'clientes' },
+  { to:'/agenda',       icon:CalendarDays,      label:'Agenda',       perm:'agenda' },
+  { to:'/historico',    icon:MessageSquareText, label:'Histórico',    perm:'historico' },
+  { to:'/captacao',     icon:Filter,            label:'Captação',     perm:'captacao' },
+  { to:'/pedidos',      icon:ShoppingCart,      label:'Pedidos',      perm:'vendas' },
+  { to:'/vendas',       icon:ShoppingBag,       label:'Vendas',       perm:'vendas' },
+  { to:'/financeiro',   icon:DollarSign,        label:'Financeiro',   perm:'vendas' },
+  { to:'/comissoes',    icon:Award,             label:'Comissões',    perm:'vendas' },
+  { to:'/estoque',      icon:Package,           label:'Estoque',      perm:'estoque' },
+  { to:'/equipe',       icon:UserCheck,         label:'Equipe',       perm:'equipe' },
+  { to:'/metas',        icon:Target,            label:'Metas',        perm:'metas' },
+  { to:'/ponto',        icon:Clock,             label:'Ponto',        perm:null },
+  { to:'/funcionarios', icon:UsersRound,        label:'Funcionários', perm:'funcionarios' },
 ]
 
 export default function Layout() {
@@ -25,8 +29,8 @@ export default function Layout() {
   const loc = useLocation()
 
   const visibleNav = ALL_NAV.filter(n => !n.perm || permissions[n.perm as keyof typeof permissions])
-  const title = [...visibleNav, { to:'/configuracoes', label:'Configurações' }]
-    .find(n => ('exact' in n && n.exact) ? loc.pathname===n.to : loc.pathname.startsWith(n.to))?.label ?? 'Projeto CRM'
+  const title = [...visibleNav, { to:'/configuracoes', label:'Configurações' }, { to:'/financeiro', label:'Financeiro' }, { to:'/comissoes', label:'Comissões' }, { to:'/pedidos', label:'Pedidos' }, { to:'/ponto', label:'Ponto' }]
+    .find(n => ('exact' in n && n.exact) ? loc.pathname===n.to : loc.pathname.startsWith(n.to))?.label ?? 'ProspectCRM'
   const W = col ? 52 : 210
 
   const Sidebar = () => (
@@ -35,7 +39,7 @@ export default function Layout() {
         <div style={{ width:30, height:30, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', background:'var(--accent)', flexShrink:0 }}>
           <Zap size={15} color="white"/>
         </div>
-        {!col && <span style={{ fontWeight:700, fontSize:13, color:'var(--text-primary)' }}>Projeto CRM</span>}
+        {!col && <span style={{ fontWeight:700, fontSize:13, color:'var(--text-primary)' }}>ProspectCRM</span>}
       </div>
 
       <nav style={{ flex:1, padding:'0 6px', overflowY:'auto', display:'flex', flexDirection:'column', gap:1 }}>

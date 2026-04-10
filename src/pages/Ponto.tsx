@@ -67,6 +67,7 @@ export default function Ponto() {
   const [registrando, setRegistrando] = useState(false)
 
   const load = useCallback(async () => {
+    if (!ownerId) return
     setLoading(true)
     const inicioDate = new Date(mesRef+'-01')
     const fimDate = new Date(inicioDate.getFullYear(), inicioDate.getMonth()+1, 0)
@@ -110,13 +111,14 @@ export default function Ponto() {
     let qJust = supabase.from('ponto_justificativas').select('*, funcionarios(nome)').eq('owner_id', ownerId).gte('data_referencia', inicio).lte('data_referencia', fim).order('data_referencia', {ascending:false})
     if (!permissions.isAdmin && !['supervisor'].includes(permissions.role) && meFunc) qJust = qJust.eq('funcionario_id', meFunc.id)
 
-    const [{ data: regs }, { data: justs }] = await Promise.all([qReg, qJust])
+    const [{ data: regs, error: regErr }, { data: justs }] = await Promise.all([qReg, qJust])
+    console.log('[Ponto] regs:', regs?.length, 'erro:', regErr?.message, 'ownerId:', ownerId, 'inicio:', inicio, 'fim:', fim)
     setRegistros((regs??[]) as RegistroPonto[])
     setJustificativas((justs??[]) as Justificativa[])
     setLoading(false)
   }, [ownerId, permissions, user, mesRef])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { if (ownerId) load() }, [load, ownerId])
 
   const registrarPonto = async (tipo: TipoPonto) => {
     if (!meuFuncId) { toast.error('Seu usuário não está vinculado a um funcionário'); return }

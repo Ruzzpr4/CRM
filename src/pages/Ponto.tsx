@@ -115,10 +115,25 @@ export default function Ponto() {
   const registrarPonto = async (tipo: TipoPonto) => {
     if (!meuFuncId) { toast.error('Seu usuário não está vinculado a um funcionário'); return }
     setRegistrando(true)
-    await supabase.from('ponto_registros').insert({ funcionario_id: meuFuncId, user_id_func: user?.id, tipo, data_hora: new Date().toISOString(), owner_id: ownerId })
-    toast.success(`${TIPO_LABEL[tipo]} registrada com sucesso!`)
-    setRegistrando(false)
-    load()
+    try {
+      const { error } = await supabase.from('ponto_registros').insert({
+        funcionario_id: meuFuncId,
+        user_id_func: user?.id,
+        tipo,
+        data_hora: new Date().toISOString(),
+        owner_id: ownerId
+      })
+      if (error) {
+        toast.error('Erro ao registrar: ' + error.message)
+      } else {
+        toast.success(`${TIPO_LABEL[tipo]} registrada com sucesso!`)
+        load()
+      }
+    } catch (err: any) {
+      toast.error('Erro: ' + (err?.message ?? 'Tente novamente'))
+    } finally {
+      setRegistrando(false)
+    }
   }
 
   const salvarJustificativa = async (data: any) => {

@@ -75,7 +75,13 @@ export default function Ponto() {
 
     // Busca funcionário do usuário logado
     const { data: meFunc } = await supabase.from('funcionarios').select('id,nome,email,role,ativo,user_id').eq('user_id', user?.id??'').maybeSingle()
-    if (meFunc) setMeuFuncId(meFunc.id)
+    if (meFunc) {
+      setMeuFuncId(meFunc.id)
+    } else if (permissions.isAdmin && user?.id) {
+      // Admin não tem registro em funcionarios — usa o próprio user_id como func_id virtual
+      // Cria um registro temporário ou usa user_id diretamente
+      setMeuFuncId(user.id)
+    }
 
     let funcsQuery = supabase.from('funcionarios').select('id,nome,email,role,ativo,user_id').eq('owner_id', ownerId).eq('ativo', true)
     // Supervisor vê apenas funcionários da sua equipe
@@ -88,7 +94,7 @@ export default function Ponto() {
     const { data: funcs } = await funcsQuery
     setFuncionarios((funcs??[]) as Funcionario[])
 
-    let qReg = supabase.from('ponto_registros').select('*, funcionarios(nome,email)').eq('owner_id', ownerId).gte('data_hora', inicio).lte('data_hora', fim+'T23:59:59').order('data_hora', {ascending:false})
+    let qReg = supabase.from('ponto_registros').select('*, funcionarios(nome,email)').eq('owner_id', ownerId).gte('data_hora', inicio+'T00:00:00').lte('data_hora', fim+'T23:59:59+00:00').order('data_hora', {ascending:false})
     if (!permissions.isAdmin && permissions.role === 'supervisor' && equipeId) {
       const { data: membros } = await supabase.from('org_membros').select('user_id').eq('equipe_id', equipeId).eq('ativo', true)
       const userIds = (membros ?? []).map((m: any) => m.user_id).filter(Boolean)
@@ -116,8 +122,16 @@ export default function Ponto() {
     if (!meuFuncId) { toast.error('Seu usuário não está vinculado a um funcionário'); return }
     setRegistrando(true)
     try {
+      // Para admin, funcionario_id pode ser o próprio user_id se não tiver registro em funcionarios
+      const { data: funcCheck } = await supabase.from('funcionarios').select('id').eq('user_id', user?.id??'').maybeSingle()
+      const funcId = funcCheck?.id ?? meuFuncId
+      if (!funcId) {
+        toast.error('Não foi possível identificar seu registro de funcionário.')
+        setRegistrando(false)
+        return
+      }
       const { error } = await supabase.from('ponto_registros').insert({
-        funcionario_id: meuFuncId,
+        funcionario_id: funcId,
         user_id_func: user?.id,
         tipo,
         data_hora: new Date().toISOString(),

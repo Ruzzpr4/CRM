@@ -69,19 +69,18 @@ export default function Ponto() {
   const load = useCallback(async () => {
     if (!ownerId) return
     setLoading(true)
-    const inicioDate = new Date(mesRef+'-01')
-    const fimDate = new Date(inicioDate.getFullYear(), inicioDate.getMonth()+1, 0)
-    const inicio = format(inicioDate, 'yyyy-MM-dd')
-    const fim = format(fimDate, 'yyyy-MM-dd')
+    const [ano, mes] = mesRef.split('-').map(Number)
+    const inicio = mesRef + '-01'
+    const ultimoDia = new Date(ano, mes, 0).getDate()
+    const fim = mesRef + '-' + String(ultimoDia).padStart(2, '0')
 
     // Busca funcionário do usuário logado
     const { data: meFunc } = await supabase.from('funcionarios').select('id,nome,email,role,ativo,user_id').eq('user_id', user?.id??'').maybeSingle()
     if (meFunc) {
       setMeuFuncId(meFunc.id)
-    } else if (permissions.isAdmin && user?.id) {
-      // Admin não tem registro em funcionarios — usa o próprio user_id como func_id virtual
-      // Cria um registro temporário ou usa user_id diretamente
-      setMeuFuncId(user.id)
+    } else {
+      // Admin ou usuário sem registro em funcionarios não pode registrar ponto diretamente
+      setMeuFuncId(null)
     }
 
     let funcsQuery = supabase.from('funcionarios').select('id,nome,email,role,ativo,user_id').eq('owner_id', ownerId).eq('ativo', true)
@@ -111,8 +110,7 @@ export default function Ponto() {
     let qJust = supabase.from('ponto_justificativas').select('*, funcionarios(nome)').eq('owner_id', ownerId).gte('data_referencia', inicio).lte('data_referencia', fim).order('data_referencia', {ascending:false})
     if (!permissions.isAdmin && !['supervisor'].includes(permissions.role) && meFunc) qJust = qJust.eq('funcionario_id', meFunc.id)
 
-    const [{ data: regs, error: regErr }, { data: justs }] = await Promise.all([qReg, qJust])
-    console.log('[Ponto] regs:', regs?.length, 'erro:', regErr?.message, 'ownerId:', ownerId, 'inicio:', inicio, 'fim:', fim)
+    const [{ data: regs }, { data: justs }] = await Promise.all([qReg, qJust])
     setRegistros((regs??[]) as RegistroPonto[])
     setJustificativas((justs??[]) as Justificativa[])
     setLoading(false)

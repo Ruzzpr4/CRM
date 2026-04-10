@@ -6,9 +6,10 @@ import { format } from 'date-fns'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
-import { clientesApi, vendedoresApi } from '../lib/api'
+import { clientesApi, vendedoresApi, estoqueApi } from '../lib/api'
 import { Cliente } from '../types'
 import { Vendedor } from '../types/vendedor'
+import { ProdutoEstoque } from '../types/estoque'
 
 type StatusPed = 'digitado'|'verificado'|'aprovado'|'concluido'|'cancelado'
 type FormaPag = 'dinheiro'|'pix'|'cartao_credito'|'cartao_debito'|'boleto'|'transferencia'|'cheque'|'outro'
@@ -27,7 +28,7 @@ const STATUS_FLOW: StatusPed[] = ['digitado','verificado','aprovado','concluido'
 
 function fmt(v:number) { return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
 
-interface PedidoItem { id?:string; descricao:string; quantidade:number; preco_unitario:number; desconto:number; percentual_comissao:number; subtotal:number }
+interface PedidoItem { id?:string; produto_id?:string; descricao:string; quantidade:number; preco_unitario:number; desconto:number; percentual_comissao:number; subtotal:number }
 interface Pedido {
   id:string; numero:number; cliente_id?:string; cliente_nome?:string; vendedor_id?:string
   status:StatusPed; forma_pagamento?:FormaPag; valor_subtotal:number; valor_desconto:number
@@ -37,22 +38,59 @@ interface Pedido {
   pedidos_itens?: PedidoItem[]
 }
 
-function ItemRow({ item, onChange, onRemove, readOnly }: { item:PedidoItem; onChange:(k:string,v:any)=>void; onRemove:()=>void; readOnly?:boolean }) {
+function ItemRow({ item, onChange, onRemove, readOnly, produtos }: { item:PedidoItem; onChange:(k:string,v:any)=>void; onRemove:()=>void; readOnly?:boolean; produtos:ProdutoEstoque[] }) {
+  const handleProduto = (produtoId: string) => {
+    const p = produtos.find(p => p.id === produtoId)
+    if (p) {
+      onChange('produto_id', p.id)
+      onChange('descricao', p.nome)
+      onChange('preco_unitario', p.preco_venda ?? 0)
+    }
+  }
   return (
-    <div className="grid gap-2 mb-2" style={{gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr auto'}}>
-      <input value={item.descricao} onChange={e=>onChange('descricao',e.target.value)} placeholder="Produto/Serviço" className="input-field text-xs py-1.5" disabled={readOnly}/>
-      <input type="number" value={item.quantidade} onChange={e=>onChange('quantidade',Number(e.target.value))} placeholder="Qtd" className="input-field text-xs py-1.5" disabled={readOnly}/>
-      <input type="number" step="0.01" value={item.preco_unitario} onChange={e=>onChange('preco_unitario',Number(e.target.value))} placeholder="Preço" className="input-field text-xs py-1.5" disabled={readOnly}/>
-      <input type="number" step="0.01" value={item.desconto} onChange={e=>onChange('desconto',Number(e.target.value))} placeholder="Desc." className="input-field text-xs py-1.5" disabled={readOnly}/>
-      <input type="number" step="0.1" value={item.percentual_comissao} onChange={e=>onChange('percentual_comissao',Number(e.target.value))} placeholder="% Com." className="input-field text-xs py-1.5" disabled={readOnly}/>
-      {!readOnly&&<button onClick={onRemove} style={{background:'none',border:'none',cursor:'pointer',color:'#f87171',padding:'0 4px'}}><XCircle size={14}/></button>}
+    <div className="rounded-xl p-3 mb-2" style={{background:'var(--bg-elevated)',border:'1px solid var(--border)'}}>
+      <div className="flex items-start gap-2 mb-2">
+        <div className="flex-1 grid gap-2" style={{gridTemplateColumns:'1fr 1fr'}}>
+          <div>
+            <p className="text-xs mb-1" style={{color:'var(--text-muted)'}}>Do estoque</p>
+            <select value={item.produto_id??''} onChange={e=>handleProduto(e.target.value)} className="input-field text-xs" style={{appearance:'none'}} disabled={readOnly}>
+              <option value="">— Selecionar —</option>
+              {produtos.map(p=><option key={p.id} value={p.id}>{p.nome} (Estq: {p.quantidade})</option>)}
+            </select>
+          </div>
+          <div>
+            <p className="text-xs mb-1" style={{color:'var(--text-muted)'}}>Descrição *</p>
+            <input value={item.descricao} onChange={e=>onChange('descricao',e.target.value)} placeholder="Nome do produto/serviço" className="input-field text-xs" disabled={readOnly}/>
+          </div>
+        </div>
+        {!readOnly&&<button onClick={onRemove} className="mt-5 flex-shrink-0" style={{background:'none',border:'none',cursor:'pointer',color:'#f87171',padding:4}}><XCircle size={15}/></button>}
+      </div>
+      <div className="grid gap-2" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
+        <div>
+          <p className="text-xs mb-1" style={{color:'var(--text-muted)'}}>Quantidade</p>
+          <input type="number" min="0.001" step="0.001" value={item.quantidade} onChange={e=>onChange('quantidade',Number(e.target.value))} className="input-field text-xs" disabled={readOnly}/>
+        </div>
+        <div>
+          <p className="text-xs mb-1" style={{color:'var(--text-muted)'}}>Preço unit.</p>
+          <input type="number" step="0.01" value={item.preco_unitario} onChange={e=>onChange('preco_unitario',Number(e.target.value))} className="input-field text-xs" disabled={readOnly}/>
+        </div>
+        <div>
+          <p className="text-xs mb-1" style={{color:'var(--text-muted)'}}>Desconto (R$)</p>
+          <input type="number" step="0.01" value={item.desconto} onChange={e=>onChange('desconto',Number(e.target.value))} className="input-field text-xs" disabled={readOnly}/>
+        </div>
+        <div>
+          <p className="text-xs mb-1" style={{color:'var(--text-muted)'}}>% Comissão</p>
+          <input type="number" step="0.1" min="0" max="100" value={item.percentual_comissao} onChange={e=>onChange('percentual_comissao',Number(e.target.value))} className="input-field text-xs" disabled={readOnly}/>
+        </div>
+      </div>
+      <div className="text-right mt-2 text-xs font-semibold" style={{color:'var(--accent)'}}>Subtotal: {fmt(item.subtotal)}</div>
     </div>
   )
 }
 
-function PedidoModal({ item, clientes, vendedores, onSave, onClose }: { item?: Pedido|null; clientes:Cliente[]; vendedores:Vendedor[]; onSave:(d:any,itens:PedidoItem[])=>Promise<void>; onClose:()=>void }) {
+function PedidoModal({ item, clientes, vendedores, produtos, onSave, onClose }: { item?: Pedido|null; clientes:Cliente[]; vendedores:Vendedor[]; produtos:ProdutoEstoque[]; onSave:(d:any,itens:PedidoItem[])=>Promise<void>; onClose:()=>void }) {
   const [f, setF] = useState({ cliente_id:'', cliente_nome:'', vendedor_id:'', status:'digitado' as StatusPed, forma_pagamento:'pix' as FormaPag, valor_desconto:'0', valor_acrescimo:'0', data_pedido:format(new Date(),'yyyy-MM-dd'), observacao:'', motivo_cancelamento:'' })
-  const [itens, setItens] = useState<PedidoItem[]>([{ descricao:'', quantidade:1, preco_unitario:0, desconto:0, percentual_comissao:0, subtotal:0 }])
+  const [itens, setItens] = useState<PedidoItem[]>([{ descricao:'', quantidade:1, preco_unitario:0, desconto:0, percentual_comissao:0, subtotal:0, produto_id:undefined }])
   const [saving, setSaving] = useState(false)
   const set = (k:string,v:unknown) => setF(p=>({...p,[k]:v}))
 
@@ -73,7 +111,7 @@ function PedidoModal({ item, clientes, vendedores, onSave, onClose }: { item?: P
     })
   }
 
-  const addItem = () => setItens(p=>[...p,{ descricao:'', quantidade:1, preco_unitario:0, desconto:0, percentual_comissao:0, subtotal:0 }])
+  const addItem = () => setItens(p=>[...p,{ descricao:'', quantidade:1, preco_unitario:0, desconto:0, percentual_comissao:0, subtotal:0, produto_id:undefined }])
   const removeItem = (i:number) => setItens(p=>p.filter((_,j)=>j!==i))
 
   const subtotal = itens.reduce((s,i)=>s+i.subtotal,0)
@@ -126,10 +164,7 @@ function PedidoModal({ item, clientes, vendedores, onSave, onClose }: { item?: P
             <label className="text-xs font-medium" style={{color:'var(--text-secondary)'}}>Itens do Pedido</label>
             <button onClick={addItem} className="btn-ghost text-xs py-1 px-3"><Plus size={12}/> Adicionar</button>
           </div>
-          <div className="text-xs font-medium grid gap-2 mb-1 px-1" style={{gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr auto', color:'var(--text-muted)'}}>
-            <span>Produto/Serviço</span><span>Qtd</span><span>Preço</span><span>Desc.</span><span>%Com.</span><span/>
-          </div>
-          {itens.map((it,i)=><ItemRow key={i} item={it} onChange={(k,v)=>updateItem(i,k,v)} onRemove={()=>removeItem(i)}/>)}
+            {itens.map((it,i)=><ItemRow key={i} item={it} onChange={(k,v)=>updateItem(i,k,v)} onRemove={()=>removeItem(i)} produtos={produtos}/>)}
         </div>
 
         <div className="rounded-xl p-3" style={{background:'var(--bg-elevated)'}}>
@@ -161,6 +196,7 @@ export default function Pedidos() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [vendedores, setVendedores] = useState<Vendedor[]>([])
+  const [produtos, setProdutos] = useState<ProdutoEstoque[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
@@ -171,13 +207,15 @@ export default function Pedidos() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [cls, vends, { data }] = await Promise.all([
+    const [cls, vends, prods, { data }] = await Promise.all([
       clientesApi.list(),
       vendedoresApi.list({ equipe_id: equipeId || undefined }),
+      estoqueApi.listProdutos(),
       supabase.from('pedidos').select('*, pedidos_itens(*)').eq('user_id', ownerId).order('created_at', { ascending: false })
     ])
     setClientes(cls)
     setVendedores(vends)
+    setProdutos(prods)
     let result = (data ?? []) as Pedido[]
 
     if (permissions.isAdmin) {
@@ -215,26 +253,90 @@ export default function Pedidos() {
         if (errItens) throw new Error(errItens.message)
       }
 
-      // Gera comissões automaticamente se o pedido tem vendedor e itens com % comissão
+      // Gera comissões: primeiro tenta regras cadastradas, depois % por item
       if (!editing && data.vendedor_id && pedidoId) {
-        const itensCom = itens.filter(it => it.percentual_comissao > 0 && it.descricao)
-        if (itensCom.length > 0) {
-          const periodo_ref = format(new Date(), 'yyyy-MM')
-          const comissoes = itensCom.map(it => ({
-            vendedor_id: data.vendedor_id,
-            pedido_id: pedidoId,
-            descricao: `Comissão: ${it.descricao} (Pedido #)`,
-            valor_base: it.subtotal,
-            percentual: it.percentual_comissao,
-            valor_comissao: Math.round(it.subtotal * it.percentual_comissao / 100 * 100) / 100,
-            tipo: 'venda',
-            status: 'pendente',
-            periodo_ref,
-            data_referencia: data.data_pedido,
-            user_id: ownerId,
-            equipe_id: equipeId || null,
-          }))
+        const periodo_ref = format(new Date(), 'yyyy-MM')
+        const nomeCliente = data.cliente_nome ?? 'Cliente'
+
+        const { data: regrasAtivas } = await supabase.from('regras_comissao')
+          .select('*').eq('vendedor_id', data.vendedor_id).eq('ativo', true).eq('user_id', ownerId)
+
+        if (regrasAtivas && regrasAtivas.length > 0) {
+          const comissoes = regrasAtivas.map((regra: any) => {
+            let valorComissao = 0
+            let percentual = 0
+            if (regra.tipo === 'percentual' || regra.tipo === 'percentual_meta') {
+              percentual = regra.valor
+              valorComissao = Math.round(data.valor_total * regra.valor / 100 * 100) / 100
+            } else if (regra.tipo === 'fixo_por_venda') {
+              valorComissao = regra.valor
+            } else if (regra.tipo === 'fixo_por_item') {
+              const totalQtd = itens.reduce((s, it) => s + it.quantidade, 0)
+              valorComissao = regra.valor * totalQtd
+            }
+            return {
+              vendedor_id: data.vendedor_id, pedido_id: pedidoId,
+              descricao: `${regra.nome} - ${nomeCliente}`,
+              valor_base: data.valor_total, percentual, valor_comissao: valorComissao,
+              tipo: 'venda', status: 'pendente',
+              periodo_ref, data_referencia: data.data_pedido,
+              user_id: ownerId, equipe_id: equipeId || null,
+            }
+          })
           await supabase.from('comissoes').insert(comissoes)
+        } else {
+          // Fallback: usa % por item
+          const itensCom = itens.filter(it => it.percentual_comissao > 0 && it.descricao)
+          if (itensCom.length > 0) {
+            const comissoes = itensCom.map(it => ({
+              vendedor_id: data.vendedor_id, pedido_id: pedidoId,
+              descricao: `Comissão: ${it.descricao}`,
+              valor_base: it.subtotal, percentual: it.percentual_comissao,
+              valor_comissao: Math.round(it.subtotal * it.percentual_comissao / 100 * 100) / 100,
+              tipo: 'venda', status: 'pendente',
+              periodo_ref, data_referencia: data.data_pedido,
+              user_id: ownerId, equipe_id: equipeId || null,
+            }))
+            await supabase.from('comissoes').insert(comissoes)
+          }
+        }
+      }
+
+      // Reserva estoque ao aprovar (status >= aprovado)
+      const statusQueReservam = ['aprovado', 'concluido']
+      const statusAnterior = editing?.status ?? ''
+      const statusNovo = data.status
+
+      if (statusQueReservam.includes(statusNovo) && !statusQueReservam.includes(statusAnterior)) {
+        for (const it of itens.filter(i => i.produto_id && i.quantidade > 0)) {
+          await estoqueApi.registrarMovimento(it.produto_id!, 'saida', it.quantidade, `Reserva pedido`)
+        }
+      }
+
+      // Ao concluir: gera conta a receber automaticamente
+      if (statusNovo === 'concluido' && statusAnterior !== 'concluido') {
+        const nomeCliente = clientes.find(c => c.id === data.cliente_id)?.nome ?? data.cliente_nome ?? 'Cliente'
+        await supabase.from('contas_receber').insert({
+          descricao: `Pedido concluído - ${nomeCliente}`,
+          cliente_nome: nomeCliente,
+          cliente_id: data.cliente_id || null,
+          valor: data.valor_total,
+          valor_recebido: 0,
+          data_emissao: format(new Date(), 'yyyy-MM-dd'),
+          data_vencimento: data.data_pedido,
+          status: 'aberto',
+          forma_pagamento: data.forma_pagamento || null,
+          pedido_id: pedidoId,
+          vendedor_id: data.vendedor_id || null,
+          user_id: ownerId,
+          equipe_id: equipeId || null,
+        })
+      }
+
+      // Ao cancelar: devolve estoque se estava reservado
+      if (statusNovo === 'cancelado' && statusQueReservam.includes(statusAnterior)) {
+        for (const it of itens.filter(i => i.produto_id && i.quantidade > 0)) {
+          await estoqueApi.registrarMovimento(it.produto_id!, 'devolucao', it.quantidade, 'Cancelamento de pedido')
         }
       }
 
@@ -350,7 +452,7 @@ export default function Pedidos() {
         </div>
       )}
 
-      {modal&&<PedidoModal item={editing} clientes={clientes} vendedores={vendedores} onSave={save} onClose={()=>{setModal(false);setEditing(null)}}/>}
+      {modal&&<PedidoModal item={editing} clientes={clientes} vendedores={vendedores} produtos={produtos} onSave={save} onClose={()=>{setModal(false);setEditing(null)}}/>}
       {deletando&&<ConfirmModal title="Excluir pedido" message={`Excluir pedido #${deletando.numero}?`} confirmLabel="Excluir" danger onConfirm={async()=>{ await supabase.from('pedidos_itens').delete().eq('pedido_id',deletando!.id); await supabase.from('pedidos').delete().eq('id',deletando!.id); setDeletando(null); load() }} onCancel={()=>setDeletando(null)}/>}
     </div>
   )

@@ -37,9 +37,9 @@ function Field({ label, children }: { label:string; children:React.ReactNode }) 
   )
 }
 
-function NovaVendaModal({ clientes, vendedores, produtos, ownerId, onSave, onClose }: {
+function NovaVendaModal({ clientes, vendedores, produtos, ownerId, equipeId, onSave, onClose }: {
   clientes:Cliente[]; vendedores:Vendedor[]; produtos:ProdutoEstoque[]
-  ownerId:string; onSave:()=>void; onClose:()=>void
+  ownerId:string; equipeId:string|null; onSave:()=>void; onClose:()=>void
 }) {
   const { vendedorId } = useAuth()
   const { toast } = useToast()
@@ -133,6 +133,118 @@ function NovaVendaModal({ clientes, vendedores, produtos, ownerId, onSave, onClo
             realizado_mes: (meta.realizado_mes||0) + 1,
             realizado_valor: (meta.realizado_valor||0) + total,
           }).eq('id', meta.id)
+        }
+      }
+
+      // 5. Gera conta a receber se confirmada ou entregue
+      if (f.status === 'confirmada' || f.status === 'entregue') {
+        const nomeCliente = clientes.find(c=>c.id===f.cliente_id)?.nome ?? 'Cliente'
+        await supabase.from('contas_receber').insert({
+          descricao: `Venda - ${nomeCliente}`,
+          cliente_nome: nomeCliente,
+          cliente_id: f.cliente_id || null,
+          valor: total,
+          valor_recebido: 0,
+          data_emissao: f.data_venda,
+          data_vencimento: f.data_venda,
+          status: 'aberto',
+          forma_pagamento: f.forma_pagamento || null,
+          vendedor_id: f.vendedor_id || null,
+          user_id: ownerId,
+          equipe_id: equipeId,
+        })
+      }
+
+      // 6. Gera comissões com base nas REGRAS cadastradas para o vendedor
+      if (f.vendedor_id && (f.status === 'confirmada' || f.status === 'entregue')) {
+        const nomeCliente = clientes.find(c=>c.id===f.cliente_id)?.nome ?? 'Cliente'
+        const periodo_ref = f.data_venda.substring(0, 7)
+
+        // Busca regras ativas do vendedor
+        const { data: regrasAtivas } = await supabase.from('regras_comissao')
+          .select('*').eq('vendedor_id', f.vendedor_id).eq('ativo', true).eq('user_id', ownerId)
+
+        if (regrasAtivas && regrasAtivas.length > 0) {
+          const comissoesParaInserir = regrasAtivas.map((regra: any) => {
+            let valorComissao = 0
+            let percentual = 0
+
+            if (regra.tipo === 'percentual' || regra.tipo === 'percentual_meta') {
+              percentual = regra.valor
+              valorComissao = Math.round(total * regra.valor / 100 * 100) / 100
+            } else if (regra.tipo === 'fixo_por_venda') {
+              valorComissao = regra.valor
+            } else if (regra.tipo === 'fixo_por_item') {
+              const totalItens = itensFiltrados.reduce((s: number, it: any) => s + Number(it.quantidade), 0)
+              valorComissao = regra.valor * totalItens
+            }
+
+            return {
+              vendedor_id: f.vendedor_id,
+              descricao: `${regra.nome} - ${nomeCliente}`,
+              valor_base: total,
+              percentual,
+              valor_comissao: valorComissao,
+              tipo: 'venda',
+              status: 'pendente',
+              periodo_ref,
+              data_referencia: f.data_venda,
+              user_id: ownerId,
+              equipe_id: equipeId || null,
+            }
+          })
+          await supabase.from('comissoes').insert(comissoesParaInserir)
+
+          // Gera conta a pagar para cada comissão
+          const nomeVendedor = vendedores.find(v=>v.id===f.vendedor_id)?.nome ?? 'Vendedor'
+          const contasPagar = comissoesParaInserir.map((c: any) => ({
+            descricao: `Comissão: ${c.descricao}`,
+            fornecedor: nomeVendedor,
+            valor: c.valor_comissao,
+            valor_pago: 0,
+            data_emissao: f.data_venda,
+            data_vencimento: f.data_venda,
+            status: 'aberto',
+            categoria: 'Comissão',
+            user_id: ownerId,
+            equipe_id: equipeId,
+          }))
+          if (contasPagar.length > 0) await supabase.from('contas_pagar').insert(contasPagar)
+
+        } else {
+          // Fallback: usa o percentual_comissao do cadastro do vendedor
+          const vendedorSel = vendedores.find(v => v.id === f.vendedor_id)
+          const percComissao = vendedorSel?.percentual_comissao ?? 0
+          if (percComissao > 0) {
+            const valorComissao = Math.round(total * percComissao / 100 * 100) / 100
+            await supabase.from('comissoes').insert({
+              vendedor_id: f.vendedor_id,
+              descricao: `Comissão venda - ${nomeCliente}`,
+              valor_base: total,
+              percentual: percComissao,
+              valor_comissao: valorComissao,
+              tipo: 'venda',
+              status: 'pendente',
+              periodo_ref,
+              data_referencia: f.data_venda,
+              user_id: ownerId,
+              equipe_id: equipeId,
+            })
+            // Gera conta a pagar para a comissão
+            const nomeVendedor2 = vendedores.find(v=>v.id===f.vendedor_id)?.nome ?? 'Vendedor'
+            await supabase.from('contas_pagar').insert({
+              descricao: `Comissão venda - ${nomeCliente}`,
+              fornecedor: nomeVendedor2,
+              valor: valorComissao,
+              valor_pago: 0,
+              data_emissao: f.data_venda,
+              data_vencimento: f.data_venda,
+              status: 'aberto',
+              categoria: 'Comissão',
+              user_id: ownerId,
+              equipe_id: equipeId,
+            })
+          }
         }
       }
 
@@ -405,7 +517,7 @@ export default function Vendas() {
         </div>
       )}
 
-      {modal&&<NovaVendaModal clientes={clientes} vendedores={vendedores} produtos={produtos} ownerId={ownerId} onSave={()=>{setModal(false);load()}} onClose={()=>setModal(false)}/>}
+      {modal&&<NovaVendaModal clientes={clientes} vendedores={vendedores} produtos={produtos} ownerId={ownerId} equipeId={equipeId} onSave={()=>{setModal(false);load()}} onClose={()=>setModal(false)}/>}
       {cancelando&&<ConfirmModal title="Cancelar venda" message={`Cancelar a venda de R$ ${cancelando.total.toFixed(2)}? O estoque não será revertido automaticamente.`} confirmLabel="Cancelar venda" danger onConfirm={cancelarVenda} onCancel={()=>setCancelando(null)}/>}
     </div>
   )

@@ -20,6 +20,13 @@ const STATUS_COLOR: Record<StatusCom,string> = {
   pago:'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
   cancelado:'bg-zinc-500/15 text-zinc-400 border-zinc-500/30',
 }
+const TIPO_REGRA_LABEL: Record<string,string> = {
+  percentual: '% sobre venda',
+  fixo_por_venda: 'Valor fixo por venda',
+  fixo_por_item: 'Valor fixo por item',
+  percentual_meta: '% se bater meta',
+}
+
 const TIPO_LABEL: Record<TipoCom,string> = { venda:'Venda', supervisor:'Supervisor', bonus:'Bônus', desconto:'Desconto' }
 
 function fmt(v:number) { return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
@@ -93,6 +100,66 @@ function ComissaoModal({ item, vendedores, onSave, onClose }: { item?: Comissao|
   )
 }
 
+
+function RegraModal({ item, vendedores, onSave, onClose }: { item?: any|null; vendedores: Vendedor[]; onSave:(d:any)=>Promise<void>; onClose:()=>void }) {
+  const [f, setF] = useState({ vendedor_id:'', nome:'', tipo:'percentual', valor:'', categoria_produto:'', ativo:true, observacao:'' })
+  const [saving, setSaving] = useState(false)
+  const set = (k:string,v:unknown) => setF(p=>({...p,[k]:v}))
+
+  useEffect(()=>{
+    if(item) setF({ vendedor_id:item.vendedor_id, nome:item.nome, tipo:item.tipo, valor:String(item.valor), categoria_produto:item.categoria_produto??'', ativo:item.ativo, observacao:item.observacao??'' })
+  },[item])
+
+  const handleSubmit = async () => {
+    if(!f.vendedor_id||!f.nome||!f.valor) return
+    setSaving(true)
+    await onSave({ ...f, valor:Number(f.valor), categoria_produto:f.categoria_produto||null })
+    setSaving(false)
+  }
+
+  return (
+    <Modal title={item?'Editar Regra':'Nova Regra de Comissão'} onClose={onClose} maxWidth="max-w-md"
+      footer={<><button onClick={onClose} className="btn-ghost flex-1 justify-center">Cancelar</button><button onClick={handleSubmit} disabled={saving} className="btn-primary flex-1 justify-center">{saving?'Salvando...':'Salvar'}</button></>}>
+      <div className="space-y-3">
+        <div><label className="block text-xs font-medium mb-1" style={{color:'var(--text-secondary)'}}>Vendedor *</label>
+          <select value={f.vendedor_id} onChange={e=>set('vendedor_id',e.target.value)} className="input-field" style={{appearance:'none'}}>
+            <option value="">Selecione...</option>
+            {vendedores.filter(v=>v.situacao).map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}
+          </select>
+        </div>
+        <div><label className="block text-xs font-medium mb-1" style={{color:'var(--text-secondary)'}}>Nome da Regra *</label>
+          <input value={f.nome} onChange={e=>set('nome',e.target.value)} className="input-field" placeholder="Ex: Comissão padrão"/>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="block text-xs font-medium mb-1" style={{color:'var(--text-secondary)'}}>Tipo *</label>
+            <select value={f.tipo} onChange={e=>set('tipo',e.target.value)} className="input-field" style={{appearance:'none'}}>
+              <option value="percentual">% sobre venda</option>
+              <option value="fixo_por_venda">Valor fixo por venda</option>
+              <option value="fixo_por_item">Valor fixo por item</option>
+              <option value="percentual_meta">% se bater meta</option>
+            </select>
+          </div>
+          <div><label className="block text-xs font-medium mb-1" style={{color:'var(--text-secondary)'}}>
+            {f.tipo.startsWith('percentual')?'Percentual (%)':'Valor (R$)'} *
+          </label>
+            <input type="number" step="0.01" value={f.valor} onChange={e=>set('valor',e.target.value)} className="input-field"/>
+          </div>
+        </div>
+        <div><label className="block text-xs font-medium mb-1" style={{color:'var(--text-secondary)'}}>Categoria do Produto (opcional)</label>
+          <input value={f.categoria_produto} onChange={e=>set('categoria_produto',e.target.value)} className="input-field" placeholder="Deixe vazio para todas as categorias"/>
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="checkbox" id="ativo-regra" checked={f.ativo} onChange={e=>set('ativo',e.target.checked)}/>
+          <label htmlFor="ativo-regra" className="text-sm" style={{color:'var(--text-primary)'}}>Regra ativa</label>
+        </div>
+        <div><label className="block text-xs font-medium mb-1" style={{color:'var(--text-secondary)'}}>Observação</label>
+          <textarea value={f.observacao} onChange={e=>set('observacao',e.target.value)} rows={2} className="input-field resize-none" placeholder="Ex: Aplicar apenas em novos clientes"/>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 export default function Comissoes() {
   const { ownerId, permissions, vendedorId, equipeId } = useAuth()
   const { toast } = useToast()
@@ -102,6 +169,10 @@ export default function Comissoes() {
   const [search, setSearch] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroPeriodo, setFiltroPeriodo] = useState('')
+  const [aba, setAba] = useState<'comissoes'|'regras'>('comissoes')
+  const [regras, setRegras] = useState<any[]>([])
+  const [modalRegra, setModalRegra] = useState(false)
+  const [editRegra, setEditRegra] = useState<any|null>(null)
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<Comissao|null>(null)
   const [deletando, setDeletando] = useState<Comissao|null>(null)
@@ -128,6 +199,12 @@ export default function Comissoes() {
     }
 
     setComissoes(result)
+
+    // Carrega regras de comissão
+    const { data: regrasData } = await supabase.from('regras_comissao')
+      .select('*, vendedores(nome)').eq('user_id', ownerId).order('created_at', {ascending:false})
+    setRegras(regrasData ?? [])
+
     setLoading(false)
   }, [ownerId, permissions.isAdmin, permissions.role, vendedorId, equipeId])
 
@@ -154,6 +231,22 @@ export default function Comissoes() {
     await supabase.from('comissoes').update({ status: 'pago', data_pagamento: format(new Date(),'yyyy-MM-dd'), updated_at: new Date().toISOString() }).eq('id', c.id)
     toast.success('Comissão marcada como paga')
     load()
+  }
+
+  const saveRegra = async (data: any) => {
+    if (editRegra) {
+      await supabase.from('regras_comissao').update({...data, updated_at: new Date().toISOString()}).eq('id', editRegra.id)
+      toast.success('Regra atualizada')
+    } else {
+      await supabase.from('regras_comissao').insert({...data, user_id: ownerId})
+      toast.success('Regra criada')
+    }
+    setModalRegra(false); setEditRegra(null); load()
+  }
+
+  const deleteRegra = async (id: string) => {
+    await supabase.from('regras_comissao').delete().eq('id', id)
+    toast.success('Regra removida'); load()
   }
 
   const filtradas = comissoes.filter(c => {
@@ -189,7 +282,35 @@ export default function Comissoes() {
         ))}
       </div>
 
-      <div className="flex gap-3 flex-wrap">
+      {/* Painel de Regras de Comissão */}
+      {(permissions.isAdmin || permissions.role === 'supervisor') && vendedores.filter(v=>v.situacao&&(v.percentual_comissao??0)>0).length > 0 && (
+        <div className="rounded-xl p-4" style={{background:'var(--bg-card)',border:'1px solid var(--border)'}}>
+          <div className="flex items-center gap-2 mb-3">
+            <Percent size={14} style={{color:'var(--accent)'}}/>
+            <p className="font-semibold text-sm" style={{color:'var(--text-primary)'}}>Regras de Comissão por Vendedor</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {vendedores.filter(v=>v.situacao&&(v.percentual_comissao??0)>0).map(v=>(
+              <div key={v.id} className="rounded-lg px-3 py-2 flex items-center justify-between" style={{background:'var(--bg-elevated)'}}>
+                <span className="text-sm" style={{color:'var(--text-primary)'}}>{v.nome}</span>
+                <span className="text-sm font-bold" style={{color:'#34d399'}}>{v.percentual_comissao}%</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs mt-2" style={{color:'var(--text-muted)'}}>Aplicado automaticamente ao registrar vendas confirmadas</p>
+        </div>
+      )}
+
+      <div className="flex gap-1 rounded-xl p-1" style={{background:'var(--bg-elevated)'}}>
+        {(['comissoes','regras'] as const).map(t=>(
+          <button key={t} onClick={()=>setAba(t)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-all"
+            style={{background:aba===t?'var(--bg-card)':'transparent', color:aba===t?'var(--text-primary)':'var(--text-muted)', border:aba===t?'1px solid var(--border)':'1px solid transparent'}}>
+            {t==='comissoes'?'Comissões':'Regras por Vendedor'}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'comissoes' && <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-40">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--text-muted)'}}/>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." className="input-field" style={{paddingLeft:'2.25rem'}}/>
@@ -199,9 +320,9 @@ export default function Comissoes() {
           {Object.entries(STATUS_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
         </select>
         <input type="month" value={filtroPeriodo} onChange={e=>setFiltroPeriodo(e.target.value)} className="input-field w-40"/>
-      </div>
+      </div>}
 
-      {loading ? (
+      {aba === 'comissoes' && (loading ? (
         <div className="flex items-center justify-center h-48"><div className="h-6 w-6 animate-spin rounded-full border-2 border-transparent" style={{borderTopColor:'var(--accent)'}}/></div>
       ) : filtradas.length === 0 ? (
         <p className="text-center py-12 text-sm" style={{color:'var(--text-muted)'}}>Nenhuma comissão encontrada</p>
@@ -240,9 +361,50 @@ export default function Comissoes() {
             </div>
           ))}
         </div>
+      ))}
+
+      {aba === 'regras' && (
+        <div className="space-y-4">
+          {(permissions.isAdmin || permissions.role === 'supervisor') && (
+            <button onClick={()=>{setEditRegra(null);setModalRegra(true)}} className="btn-primary"><Plus size={14}/> Nova Regra</button>
+          )}
+          {regras.length === 0 ? (
+            <div className="text-center py-12 rounded-xl" style={{border:'2px dashed var(--border)'}}>
+              <p className="text-sm" style={{color:'var(--text-muted)'}}>Nenhuma regra cadastrada</p>
+              <p className="text-xs mt-1" style={{color:'var(--text-muted)'}}>Crie regras para calcular comissões automaticamente ao registrar vendas</p>
+            </div>
+          ) : regras.map((r:any) => (
+            <div key={r.id} className="rounded-xl p-4 flex items-center gap-4" style={{background:'var(--bg-card)',border:'1px solid var(--border)'}}>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="font-medium text-sm" style={{color:'var(--text-primary)'}}>{r.nome}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-lg" style={{background:'var(--bg-elevated)',color:'var(--text-muted)'}}>{TIPO_REGRA_LABEL[r.tipo]}</span>
+                  {!r.ativo && <span className="text-xs px-2 py-0.5 rounded-lg" style={{background:'rgba(248,113,113,0.1)',color:'#f87171'}}>Inativa</span>}
+                </div>
+                <div className="flex gap-4 text-xs" style={{color:'var(--text-muted)'}}>
+                  <span>Vendedor: <strong>{r.vendedores?.nome ?? '—'}</strong></span>
+                  {r.categoria_produto && <span>Categoria: {r.categoria_produto}</span>}
+                  {r.observacao && <span>{r.observacao}</span>}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="font-bold text-lg" style={{color:'var(--accent)'}}>
+                  {r.tipo === 'percentual' || r.tipo === 'percentual_meta' ? `${r.valor}%` : r.valor.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+                </p>
+              </div>
+              {(permissions.isAdmin || permissions.role === 'supervisor') && (
+                <div className="flex gap-1">
+                  <button onClick={()=>{setEditRegra(r);setModalRegra(true)}} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:4}}><Pencil size={13}/></button>
+                  <button onClick={()=>deleteRegra(r.id)} style={{background:'none',border:'none',cursor:'pointer',color:'#f87171',padding:4}}><Trash2 size={13}/></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
       {modal&&<ComissaoModal item={editing} vendedores={vendedores} onSave={save} onClose={()=>{setModal(false);setEditing(null)}}/>}
+      {modalRegra&&<RegraModal item={editRegra} vendedores={vendedores} onSave={saveRegra} onClose={()=>{setModalRegra(false);setEditRegra(null)}}/>}
       {deletando&&<ConfirmModal title="Excluir comissão" message={`Excluir comissão de "${deletando.descricao}"?`} confirmLabel="Excluir" danger onConfirm={async()=>{ await supabase.from('comissoes').delete().eq('id',deletando.id); setDeletando(null); load() }} onCancel={()=>setDeletando(null)}/>}
     </div>
   )

@@ -152,13 +152,11 @@ export default function Financeiro() {
     let crData = (rcr.data ?? []) as ContaReceber[]
 
     // Filtra por equipe para supervisor e vendedor
+    // Mostra registros da equipe OU registros sem equipe_id criados no mesmo owner
     if (!permissions.isAdmin) {
       if (equipeId) {
-        cpData = cpData.filter(c => c.equipe_id === equipeId)
-        crData = crData.filter(c => c.equipe_id === equipeId)
-      } else {
-        cpData = []
-        crData = []
+        cpData = cpData.filter(c => c.equipe_id === equipeId || c.equipe_id === null)
+        crData = crData.filter(c => c.equipe_id === equipeId || c.equipe_id === null)
       }
     }
 

@@ -596,3 +596,345 @@ CREATE POLICY "func_i" ON public.funcionarios FOR INSERT  WITH CHECK (auth.uid()
 CREATE POLICY "func_u" ON public.funcionarios FOR UPDATE  USING (auth.uid()=owner_id);
 CREATE POLICY "func_d" ON public.funcionarios FOR DELETE  USING (auth.uid()=owner_id);
 CREATE OR REPLACE TRIGGER trg_func_upd BEFORE UPDATE ON public.funcionarios FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ============================================================
+-- NOVOS MÓDULOS — Adicionados durante o desenvolvimento
+-- ============================================================
+
+-- ── Colunas adicionais em clientes ──────────────────────────
+ALTER TABLE public.clientes ADD COLUMN IF NOT EXISTS canal_origem TEXT;
+ALTER TABLE public.clientes ADD COLUMN IF NOT EXISTS lead_quente BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.clientes ADD COLUMN IF NOT EXISTS consultor_id UUID;
+ALTER TABLE public.clientes ADD COLUMN IF NOT EXISTS indicado_por_id UUID;
+
+-- ── Colunas adicionais em captacao ──────────────────────────
+ALTER TABLE public.captacao ADD COLUMN IF NOT EXISTS canal TEXT;
+
+-- ── Colunas adicionais em funcionarios (RH) ─────────────────
+ALTER TABLE public.funcionarios ADD COLUMN IF NOT EXISTS turno_id UUID;
+ALTER TABLE public.funcionarios ADD COLUMN IF NOT EXISTS cargo_id UUID;
+ALTER TABLE public.funcionarios ADD COLUMN IF NOT EXISTS salario NUMERIC(10,2);
+ALTER TABLE public.funcionarios ADD COLUMN IF NOT EXISTS data_admissao DATE;
+ALTER TABLE public.funcionarios ADD COLUMN IF NOT EXISTS data_demissao DATE;
+ALTER TABLE public.funcionarios ADD COLUMN IF NOT EXISTS tipo_contrato TEXT CHECK (tipo_contrato IN ('clt','pj','estagio','autonomo','outro'));
+
+-- ── Org Membros (equipe ↔ funcionário) ───────────────────────
+CREATE TABLE IF NOT EXISTS public.org_membros (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  equipe_id   UUID NOT NULL REFERENCES public.equipes(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  vendedor_id UUID REFERENCES public.vendedores(id) ON DELETE SET NULL,
+  ativo       BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_om_equipe   ON public.org_membros(equipe_id);
+CREATE INDEX IF NOT EXISTS idx_om_user     ON public.org_membros(user_id);
+ALTER TABLE public.org_membros ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "om_s" ON public.org_membros FOR SELECT USING (TRUE);
+CREATE POLICY "om_i" ON public.org_membros FOR INSERT WITH CHECK (auth.uid() IN (SELECT owner_id FROM public.funcionarios WHERE user_id = auth.uid() LIMIT 1) OR auth.uid() IN (SELECT id FROM auth.users WHERE id = auth.uid()));
+CREATE POLICY "om_u" ON public.org_membros FOR UPDATE USING (TRUE);
+CREATE POLICY "om_d" ON public.org_membros FOR DELETE USING (TRUE);
+
+-- ── Organizações ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.organizacoes (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  nome       VARCHAR(100) NOT NULL,
+  owner_id   UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.organizacoes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "org_s" ON public.organizacoes FOR SELECT USING (auth.uid()=owner_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=organizacoes.owner_id));
+CREATE POLICY "org_i" ON public.organizacoes FOR INSERT WITH CHECK (auth.uid()=owner_id);
+CREATE POLICY "org_u" ON public.organizacoes FOR UPDATE USING (auth.uid()=owner_id);
+
+-- ============================================================
+-- FINANCEIRO
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.contas_pagar (
+  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  descricao        VARCHAR(200) NOT NULL,
+  fornecedor       VARCHAR(100),
+  valor            NUMERIC(12,2) NOT NULL,
+  valor_pago       NUMERIC(12,2) NOT NULL DEFAULT 0,
+  data_emissao     DATE NOT NULL DEFAULT CURRENT_DATE,
+  data_vencimento  DATE NOT NULL,
+  data_pagamento   DATE,
+  status           TEXT NOT NULL DEFAULT 'aberto'
+                   CHECK (status IN ('aberto','pago','atrasado','parcial','cancelado')),
+  categoria        TEXT,
+  observacao       TEXT,
+  vendedor_id      UUID REFERENCES public.vendedores(id) ON DELETE SET NULL,
+  equipe_id        UUID REFERENCES public.equipes(id) ON DELETE SET NULL,
+  user_id          UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cp_user   ON public.contas_pagar(user_id);
+CREATE INDEX IF NOT EXISTS idx_cp_status ON public.contas_pagar(status);
+CREATE INDEX IF NOT EXISTS idx_cp_venc   ON public.contas_pagar(data_vencimento);
+ALTER TABLE public.contas_pagar ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "cp_s" ON public.contas_pagar FOR SELECT USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=contas_pagar.user_id AND funcionarios.ativo=true));
+CREATE POLICY "cp_i" ON public.contas_pagar FOR INSERT WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=contas_pagar.user_id AND funcionarios.ativo=true));
+CREATE POLICY "cp_u" ON public.contas_pagar FOR UPDATE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=contas_pagar.user_id AND funcionarios.ativo=true));
+CREATE POLICY "cp_d" ON public.contas_pagar FOR DELETE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=contas_pagar.user_id AND funcionarios.ativo=true));
+CREATE TRIGGER trg_cp_upd BEFORE UPDATE ON public.contas_pagar FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.contas_receber (
+  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  descricao         VARCHAR(200) NOT NULL,
+  cliente_id        UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
+  cliente_nome      VARCHAR(100),
+  valor             NUMERIC(12,2) NOT NULL,
+  valor_recebido    NUMERIC(12,2) NOT NULL DEFAULT 0,
+  data_emissao      DATE NOT NULL DEFAULT CURRENT_DATE,
+  data_vencimento   DATE NOT NULL,
+  data_recebimento  DATE,
+  status            TEXT NOT NULL DEFAULT 'aberto'
+                    CHECK (status IN ('aberto','recebido','atrasado','parcial','cancelado')),
+  forma_pagamento   TEXT CHECK (forma_pagamento IN ('dinheiro','pix','cartao_credito','cartao_debito','boleto','transferencia','cheque','outro')),
+  categoria         TEXT,
+  observacao        TEXT,
+  pedido_id         UUID,
+  vendedor_id       UUID REFERENCES public.vendedores(id) ON DELETE SET NULL,
+  equipe_id         UUID REFERENCES public.equipes(id) ON DELETE SET NULL,
+  user_id           UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cr_user   ON public.contas_receber(user_id);
+CREATE INDEX IF NOT EXISTS idx_cr_status ON public.contas_receber(status);
+ALTER TABLE public.contas_receber ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "cr_s" ON public.contas_receber FOR SELECT USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=contas_receber.user_id AND funcionarios.ativo=true));
+CREATE POLICY "cr_i" ON public.contas_receber FOR INSERT WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=contas_receber.user_id AND funcionarios.ativo=true));
+CREATE POLICY "cr_u" ON public.contas_receber FOR UPDATE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=contas_receber.user_id AND funcionarios.ativo=true));
+CREATE POLICY "cr_d" ON public.contas_receber FOR DELETE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=contas_receber.user_id AND funcionarios.ativo=true));
+CREATE TRIGGER trg_cr_upd BEFORE UPDATE ON public.contas_receber FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.lancamentos_caixa (
+  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tipo             TEXT NOT NULL CHECK (tipo IN ('entrada','saida')),
+  descricao        VARCHAR(200) NOT NULL,
+  valor            NUMERIC(12,2) NOT NULL,
+  data_lancamento  DATE NOT NULL DEFAULT CURRENT_DATE,
+  categoria        TEXT,
+  forma_pagamento  TEXT,
+  conta_pagar_id   UUID REFERENCES public.contas_pagar(id) ON DELETE SET NULL,
+  conta_receber_id UUID REFERENCES public.contas_receber(id) ON DELETE SET NULL,
+  observacao       TEXT,
+  user_id          UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.lancamentos_caixa ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "lc_s" ON public.lancamentos_caixa FOR SELECT USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=lancamentos_caixa.user_id AND funcionarios.ativo=true));
+CREATE POLICY "lc_i" ON public.lancamentos_caixa FOR INSERT WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=lancamentos_caixa.user_id AND funcionarios.ativo=true));
+CREATE POLICY "lc_d" ON public.lancamentos_caixa FOR DELETE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=lancamentos_caixa.user_id AND funcionarios.ativo=true));
+
+-- ============================================================
+-- COMISSÕES
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.comissoes (
+  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  vendedor_id      UUID NOT NULL REFERENCES public.vendedores(id) ON DELETE CASCADE,
+  pedido_id        UUID,
+  descricao        VARCHAR(200) NOT NULL,
+  valor_base       NUMERIC(12,2) NOT NULL,
+  percentual       NUMERIC(5,2) NOT NULL DEFAULT 0,
+  valor_comissao   NUMERIC(12,2) NOT NULL,
+  tipo             TEXT NOT NULL DEFAULT 'venda' CHECK (tipo IN ('venda','supervisor','bonus','desconto')),
+  status           TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','validado','pago','cancelado')),
+  periodo_ref      VARCHAR(7),
+  data_referencia  DATE,
+  data_pagamento   DATE,
+  observacao       TEXT,
+  validado_por     UUID REFERENCES auth.users(id),
+  equipe_id        UUID REFERENCES public.equipes(id) ON DELETE SET NULL,
+  user_id          UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_com_vend ON public.comissoes(vendedor_id);
+CREATE INDEX IF NOT EXISTS idx_com_user ON public.comissoes(user_id);
+ALTER TABLE public.comissoes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "com_s" ON public.comissoes FOR SELECT USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=comissoes.user_id AND funcionarios.ativo=true));
+CREATE POLICY "com_i" ON public.comissoes FOR INSERT WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=comissoes.user_id AND funcionarios.ativo=true));
+CREATE POLICY "com_u" ON public.comissoes FOR UPDATE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=comissoes.user_id AND funcionarios.ativo=true));
+CREATE POLICY "com_d" ON public.comissoes FOR DELETE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=comissoes.user_id AND funcionarios.ativo=true));
+CREATE TRIGGER trg_com_upd BEFORE UPDATE ON public.comissoes FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.regras_comissao (
+  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  vendedor_id       UUID NOT NULL REFERENCES public.vendedores(id) ON DELETE CASCADE,
+  nome              VARCHAR(100) NOT NULL,
+  tipo              TEXT NOT NULL DEFAULT 'percentual' CHECK (tipo IN ('percentual','fixo_por_venda','fixo_por_item','percentual_meta')),
+  valor             NUMERIC(10,2) NOT NULL DEFAULT 0,
+  categoria_produto TEXT,
+  ativo             BOOLEAN NOT NULL DEFAULT TRUE,
+  observacao        TEXT,
+  user_id           UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rc_vendedor ON public.regras_comissao(vendedor_id);
+ALTER TABLE public.regras_comissao ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "rc_s" ON public.regras_comissao FOR SELECT USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=regras_comissao.user_id AND funcionarios.ativo=true));
+CREATE POLICY "rc_i" ON public.regras_comissao FOR INSERT WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=regras_comissao.user_id AND funcionarios.ativo=true));
+CREATE POLICY "rc_u" ON public.regras_comissao FOR UPDATE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=regras_comissao.user_id AND funcionarios.ativo=true));
+CREATE POLICY "rc_d" ON public.regras_comissao FOR DELETE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=regras_comissao.user_id AND funcionarios.ativo=true));
+CREATE TRIGGER trg_rc_upd BEFORE UPDATE ON public.regras_comissao FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ============================================================
+-- PEDIDOS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.pedidos (
+  id                   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  numero               SERIAL,
+  cliente_id           UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
+  cliente_nome         VARCHAR(100),
+  vendedor_id          UUID REFERENCES public.vendedores(id) ON DELETE SET NULL,
+  status               TEXT NOT NULL DEFAULT 'digitado' CHECK (status IN ('digitado','verificado','aprovado','concluido','cancelado')),
+  forma_pagamento      TEXT CHECK (forma_pagamento IN ('dinheiro','pix','cartao_credito','cartao_debito','boleto','transferencia','cheque','outro')),
+  valor_subtotal       NUMERIC(12,2) NOT NULL DEFAULT 0,
+  valor_desconto       NUMERIC(12,2) NOT NULL DEFAULT 0,
+  valor_acrescimo      NUMERIC(12,2) NOT NULL DEFAULT 0,
+  valor_total          NUMERIC(12,2) NOT NULL DEFAULT 0,
+  data_pedido          DATE NOT NULL DEFAULT CURRENT_DATE,
+  data_aprovacao       DATE,
+  data_conclusao       DATE,
+  observacao           TEXT,
+  motivo_cancelamento  TEXT,
+  aprovado_por         UUID REFERENCES auth.users(id),
+  equipe_id            UUID REFERENCES public.equipes(id) ON DELETE SET NULL,
+  user_id              UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ped_user   ON public.pedidos(user_id);
+CREATE INDEX IF NOT EXISTS idx_ped_status ON public.pedidos(status);
+ALTER TABLE public.pedidos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "ped_s" ON public.pedidos FOR SELECT USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=pedidos.user_id AND funcionarios.ativo=true));
+CREATE POLICY "ped_i" ON public.pedidos FOR INSERT WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=pedidos.user_id AND funcionarios.ativo=true));
+CREATE POLICY "ped_u" ON public.pedidos FOR UPDATE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=pedidos.user_id AND funcionarios.ativo=true));
+CREATE POLICY "ped_d" ON public.pedidos FOR DELETE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=pedidos.user_id AND funcionarios.ativo=true));
+CREATE TRIGGER trg_ped_upd BEFORE UPDATE ON public.pedidos FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+ALTER PUBLICATION supabase_realtime ADD TABLE public.pedidos;
+
+CREATE TABLE IF NOT EXISTS public.pedidos_itens (
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  pedido_id           UUID NOT NULL REFERENCES public.pedidos(id) ON DELETE CASCADE,
+  produto_id          UUID REFERENCES public.produtos_estoque(id) ON DELETE SET NULL,
+  descricao           VARCHAR(200) NOT NULL,
+  quantidade          NUMERIC(10,3) NOT NULL DEFAULT 1,
+  preco_unitario      NUMERIC(12,2) NOT NULL,
+  desconto            NUMERIC(12,2) NOT NULL DEFAULT 0,
+  percentual_comissao NUMERIC(5,2) NOT NULL DEFAULT 0,
+  subtotal            NUMERIC(12,2) NOT NULL,
+  equipe_id           UUID REFERENCES public.equipes(id) ON DELETE SET NULL,
+  user_id             UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pi_ped ON public.pedidos_itens(pedido_id);
+ALTER TABLE public.pedidos_itens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pi_s" ON public.pedidos_itens FOR SELECT USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=pedidos_itens.user_id AND funcionarios.ativo=true));
+CREATE POLICY "pi_i" ON public.pedidos_itens FOR INSERT WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=pedidos_itens.user_id AND funcionarios.ativo=true));
+CREATE POLICY "pi_u" ON public.pedidos_itens FOR UPDATE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=pedidos_itens.user_id AND funcionarios.ativo=true));
+CREATE POLICY "pi_d" ON public.pedidos_itens FOR DELETE USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=pedidos_itens.user_id AND funcionarios.ativo=true));
+
+-- ============================================================
+-- PONTO ELETRÔNICO
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.ponto_registros (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  funcionario_id UUID NOT NULL REFERENCES public.funcionarios(id) ON DELETE CASCADE,
+  user_id_func  UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  tipo          TEXT NOT NULL CHECK (tipo IN ('entrada','saida','intervalo_inicio','intervalo_fim')),
+  data_hora     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ip_address    TEXT,
+  observacao    TEXT,
+  owner_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pt_func  ON public.ponto_registros(funcionario_id);
+CREATE INDEX IF NOT EXISTS idx_pt_owner ON public.ponto_registros(owner_id);
+ALTER TABLE public.ponto_registros ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pt_s" ON public.ponto_registros FOR SELECT USING (auth.uid()=owner_id OR auth.uid()=user_id_func OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=ponto_registros.owner_id AND funcionarios.ativo=true));
+CREATE POLICY "pt_i" ON public.ponto_registros FOR INSERT WITH CHECK (auth.uid()=owner_id OR auth.uid()=user_id_func);
+CREATE POLICY "pt_u" ON public.ponto_registros FOR UPDATE USING (auth.uid()=owner_id);
+CREATE POLICY "pt_d" ON public.ponto_registros FOR DELETE USING (auth.uid()=owner_id);
+ALTER PUBLICATION supabase_realtime ADD TABLE public.ponto_registros;
+
+CREATE TABLE IF NOT EXISTS public.ponto_justificativas (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  funcionario_id  UUID NOT NULL REFERENCES public.funcionarios(id) ON DELETE CASCADE,
+  data_referencia DATE NOT NULL,
+  tipo            TEXT NOT NULL CHECK (tipo IN ('falta','atraso','saida_antecipada','hora_extra')),
+  motivo          TEXT NOT NULL,
+  aprovado        BOOLEAN,
+  aprovado_por    UUID REFERENCES auth.users(id),
+  owner_id        UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.ponto_justificativas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pj_s" ON public.ponto_justificativas FOR SELECT USING (auth.uid()=owner_id);
+CREATE POLICY "pj_i" ON public.ponto_justificativas FOR INSERT WITH CHECK (auth.uid()=owner_id);
+CREATE POLICY "pj_u" ON public.ponto_justificativas FOR UPDATE USING (auth.uid()=owner_id);
+CREATE POLICY "pj_d" ON public.ponto_justificativas FOR DELETE USING (auth.uid()=owner_id);
+
+-- ============================================================
+-- RH — CARGOS, TURNOS E AUSÊNCIAS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.rh_cargos (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  nome        VARCHAR(100) NOT NULL,
+  descricao   TEXT,
+  salario_base NUMERIC(10,2),
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.rh_cargos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "rh_cargos_all" ON public.rh_cargos FOR ALL USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=rh_cargos.user_id AND funcionarios.ativo=true)) WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=rh_cargos.user_id AND funcionarios.ativo=true));
+
+ALTER TABLE public.funcionarios ADD CONSTRAINT fk_func_cargo FOREIGN KEY (cargo_id) REFERENCES public.rh_cargos(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS public.rh_turnos (
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  nome                VARCHAR(100) NOT NULL,
+  hora_entrada        TIME NOT NULL,
+  hora_saida          TIME NOT NULL,
+  hora_intervalo_ini  TIME,
+  hora_intervalo_fim  TIME,
+  dias_semana         TEXT DEFAULT '1,2,3,4,5',
+  user_id             UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.rh_turnos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "rh_turnos_all" ON public.rh_turnos FOR ALL USING (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=rh_turnos.user_id AND funcionarios.ativo=true)) WITH CHECK (auth.uid()=user_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=rh_turnos.user_id AND funcionarios.ativo=true));
+
+ALTER TABLE public.funcionarios ADD CONSTRAINT fk_func_turno FOREIGN KEY (turno_id) REFERENCES public.rh_turnos(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS public.rh_ausencias (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  funcionario_id  UUID NOT NULL REFERENCES public.funcionarios(id) ON DELETE CASCADE,
+  tipo            TEXT NOT NULL CHECK (tipo IN ('falta','atestado','atraso','saida_antecipada','ferias','licenca','abono','hora_extra')),
+  data_inicio     DATE NOT NULL,
+  data_fim        DATE,
+  hora_inicio     TIME,
+  hora_fim        TIME,
+  motivo          TEXT,
+  aprovado        BOOLEAN,
+  aprovado_por    UUID REFERENCES auth.users(id),
+  documento_url   TEXT,
+  owner_id        UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rh_aus_func  ON public.rh_ausencias(funcionario_id);
+CREATE INDEX IF NOT EXISTS idx_rh_aus_owner ON public.rh_ausencias(owner_id);
+ALTER TABLE public.rh_ausencias ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "rh_aus_s" ON public.rh_ausencias FOR SELECT USING (auth.uid()=owner_id OR auth.uid()=(SELECT user_id FROM public.funcionarios WHERE id=rh_ausencias.funcionario_id LIMIT 1));
+CREATE POLICY "rh_aus_i" ON public.rh_ausencias FOR INSERT WITH CHECK (auth.uid()=owner_id OR EXISTS (SELECT 1 FROM public.funcionarios WHERE funcionarios.user_id=auth.uid() AND funcionarios.owner_id=rh_ausencias.owner_id AND funcionarios.ativo=true));
+CREATE POLICY "rh_aus_u" ON public.rh_ausencias FOR UPDATE USING (auth.uid()=owner_id);
+CREATE POLICY "rh_aus_d" ON public.rh_ausencias FOR DELETE USING (auth.uid()=owner_id);

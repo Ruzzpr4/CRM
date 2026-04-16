@@ -12,6 +12,11 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 type VendaStatus = 'rascunho'|'pendente'|'confirmada'|'cancelada'|'entregue'
+const FORMA_LABEL: Record<string,string> = {
+  dinheiro:'Dinheiro', pix:'PIX', cartao_credito:'Cartão Crédito',
+  cartao_debito:'Cartão Débito', boleto:'Boleto', transferencia:'Transferência',
+  cheque:'Cheque', outro:'Outro',
+}
 interface VendaItem { id:string; descricao:string; quantidade:number; preco_unit:number; total:number; produto_id?:string }
 interface Venda {
   id:string; cliente_id?:string; vendedor_id?:string; status:VendaStatus
@@ -139,7 +144,7 @@ function NovaVendaModal({ clientes, vendedores, produtos, ownerId, equipeId, onS
       // 5. Gera conta a receber se confirmada ou entregue
       if (f.status === 'confirmada' || f.status === 'entregue') {
         const nomeCliente = clientes.find(c=>c.id===f.cliente_id)?.nome ?? 'Cliente'
-        await supabase.from('contas_receber').insert({
+        const { error: crErr } = await supabase.from('contas_receber').insert({
           descricao: `Venda - ${nomeCliente}`,
           cliente_nome: nomeCliente,
           cliente_id: f.cliente_id || null,
@@ -148,11 +153,12 @@ function NovaVendaModal({ clientes, vendedores, produtos, ownerId, equipeId, onS
           data_emissao: f.data_venda,
           data_vencimento: f.data_venda,
           status: 'aberto',
-          forma_pagamento: f.forma_pagamento || null,
+          forma_pagamento: f.forma_pagamento || null,  // already normalized
           vendedor_id: f.vendedor_id || null,
           user_id: ownerId,
-          equipe_id: equipeId,
+          equipe_id: equipeId || null,
         })
+        if (crErr) console.error('[Vendas] Erro conta a receber:', crErr.message)
       }
 
       // 6. Gera comissões com base nas REGRAS cadastradas para o vendedor
@@ -301,7 +307,15 @@ function NovaVendaModal({ clientes, vendedores, produtos, ownerId, equipeId, onS
           <Field label="Forma de Pagamento">
             <select value={f.forma_pagamento} onChange={e=>set('forma_pagamento',e.target.value)} className="input-field" style={{appearance:'none'}}>
               <option value="">— Selecione —</option>
-              {['Dinheiro','PIX','Cartão de Crédito','Cartão de Débito','Boleto','Transferência','Outros'].map(p=><option key={p} value={p}>{p}</option>)}
+              <option value="">— Selecione —</option>
+              <option value="dinheiro">Dinheiro</option>
+              <option value="pix">PIX</option>
+              <option value="cartao_credito">Cartão de Crédito</option>
+              <option value="cartao_debito">Cartão de Débito</option>
+              <option value="boleto">Boleto</option>
+              <option value="transferencia">Transferência</option>
+              <option value="cheque">Cheque</option>
+              <option value="outro">Outro</option>
             </select>
           </Field>
         </div>
@@ -377,6 +391,7 @@ export default function Vendas() {
   const [modal, setModal] = useState(false)
   const [expandedId, setExpandedId] = useState<string|null>(null)
   const [cancelando, setCancelando] = useState<Venda|null>(null)
+  const [devolverEstoque, setDevolverEstoque] = useState(true)
   const { toast } = useToast()
 
   const load = useCallback(async () => {
@@ -414,8 +429,33 @@ export default function Vendas() {
     if (!cancelando) return
     const { supabase } = await import('../lib/supabase')
     await supabase.from('vendas').update({status:'cancelada'}).eq('id', cancelando.id)
-    toast.success('Venda cancelada')
-    setCancelando(null); load()
+
+    // Cancela conta a receber correspondente à venda (mesma data e valor)
+    const dataVenda = cancelando.data_venda.substring(0, 10)
+    await supabase.from('contas_receber')
+      .update({ status: 'cancelado', updated_at: new Date().toISOString() })
+      .eq('user_id', ownerId)
+      .eq('valor', cancelando.total)
+      .eq('data_vencimento', dataVenda)
+      .eq('status', 'aberto')
+
+    // Devolver itens ao estoque se solicitado
+    if (devolverEstoque) {
+      const { data: itens } = await supabase.from('venda_itens').select('*').eq('venda_id', cancelando.id)
+      if (itens && itens.length > 0) {
+        for (const it of itens) {
+          if (it.produto_id) {
+            await estoqueApi.registrarMovimento(it.produto_id, 'devolucao', Number(it.quantidade), `Cancelamento de venda`)
+          }
+        }
+        toast.success(`Venda cancelada — ${itens.filter((i:any)=>i.produto_id).length} item(ns) devolvido(s) ao estoque`)
+      } else {
+        toast.success('Venda cancelada')
+      }
+    } else {
+      toast.success('Venda cancelada — estoque não alterado')
+    }
+    setCancelando(null); setDevolverEstoque(true); load()
   }
 
   const filtered = vendas.filter(v => {
@@ -500,7 +540,7 @@ export default function Vendas() {
                 {exp&&(
                   <div style={{padding:'10px 16px 14px',background:'var(--bg-raised)',borderTop:'1px solid var(--border)'}}>
                     <div style={{display:'flex',gap:16,flexWrap:'wrap',marginBottom:10}}>
-                      {v.forma_pagamento&&<p style={{fontSize:12,color:'var(--text-muted)'}}>💳 {v.forma_pagamento}</p>}
+                      {v.forma_pagamento&&<p style={{fontSize:12,color:'var(--text-muted)'}}>💳 {FORMA_LABEL[v.forma_pagamento]??v.forma_pagamento}</p>}
                       {v.desconto>0&&<p style={{fontSize:12,color:'var(--text-muted)'}}>🏷️ Desconto: R$ {v.desconto.toFixed(2)}</p>}
                       {v.observacoes&&<p style={{fontSize:12,color:'var(--text-muted)'}}>📝 {v.observacoes}</p>}
                     </div>
@@ -518,7 +558,32 @@ export default function Vendas() {
       )}
 
       {modal&&<NovaVendaModal clientes={clientes} vendedores={vendedores} produtos={produtos} ownerId={ownerId} equipeId={equipeId} onSave={()=>{setModal(false);load()}} onClose={()=>setModal(false)}/>}
-      {cancelando&&<ConfirmModal title="Cancelar venda" message={`Cancelar a venda de R$ ${cancelando.total.toFixed(2)}? O estoque não será revertido automaticamente.`} confirmLabel="Cancelar venda" danger onConfirm={cancelarVenda} onCancel={()=>setCancelando(null)}/>}
+      {cancelando&&(
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{background:'rgba(0,0,0,0.5)'}}>
+          <div className="rounded-2xl p-6 w-full max-w-sm" style={{background:'var(--bg-card)',border:'1px solid var(--border)'}}>
+            <h3 className="font-bold text-base mb-2" style={{color:'var(--text-primary)'}}>Cancelar venda</h3>
+            <p className="text-sm mb-4" style={{color:'var(--text-secondary)'}}>
+              Cancelar a venda de <strong>R$ {cancelando.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong>?
+            </p>
+            <label className="flex items-center gap-3 mb-5 cursor-pointer p-3 rounded-xl"
+              style={{background:'var(--bg-elevated)',border:'1px solid var(--border)'}}>
+              <input type="checkbox" checked={devolverEstoque} onChange={e=>setDevolverEstoque(e.target.checked)}
+                className="w-4 h-4 accent-violet-500"/>
+              <div>
+                <p className="text-sm font-medium" style={{color:'var(--text-primary)'}}>Devolver itens ao estoque</p>
+                <p className="text-xs" style={{color:'var(--text-muted)'}}>Repõe a quantidade de cada produto vendido</p>
+              </div>
+            </label>
+            <div className="flex gap-3">
+              <button onClick={()=>{setCancelando(null);setDevolverEstoque(true)}} className="btn-ghost flex-1 justify-center">Voltar</button>
+              <button onClick={cancelarVenda} className="flex-1 py-2 rounded-xl font-semibold text-sm"
+                style={{background:'rgba(239,68,68,0.15)',color:'#f87171',border:'1px solid rgba(239,68,68,0.3)',cursor:'pointer'}}>
+                Confirmar cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

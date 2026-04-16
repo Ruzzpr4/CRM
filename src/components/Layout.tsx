@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Outlet, NavLink, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
-import { Zap, LayoutDashboard, Users, CalendarDays, MessageSquareText, Filter, Settings, LogOut, ChevronRight, Sun, Moon, Menu, UserCheck, Target, Package, UsersRound, ShoppingBag, DollarSign, Award, ShoppingCart, Clock } from 'lucide-react'
+import { Zap, LayoutDashboard, Users, CalendarDays, MessageSquareText, Filter, Settings, LogOut, ChevronRight, Sun, Moon, Menu, UserCheck, Target, Package, UsersRound, ShoppingBag, DollarSign, Award, ShoppingCart, Clock, BarChart2, HeartHandshake } from 'lucide-react'
 
 const ALL_NAV = [
   { to:'/',              icon:LayoutDashboard,   label:'Dashboard',    exact:true,  perm:null },
@@ -19,6 +19,8 @@ const ALL_NAV = [
   { to:'/metas',        icon:Target,            label:'Metas',        perm:'metas' },
   { to:'/ponto',        icon:Clock,             label:'Ponto',        perm:null },
   { to:'/funcionarios', icon:UsersRound,        label:'Funcionários', perm:'funcionarios' },
+  { to:'/relatorios',   icon:BarChart2,         label:'Relatórios',   perm:null },
+  { to:'/rh',            icon:HeartHandshake,    label:'RH',           perm:'funcionarios' },
 ]
 
 export default function Layout() {
@@ -29,7 +31,7 @@ export default function Layout() {
   const loc = useLocation()
 
   const visibleNav = ALL_NAV.filter(n => !n.perm || permissions[n.perm as keyof typeof permissions])
-  const title = [...visibleNav, { to:'/configuracoes', label:'Configurações' }, { to:'/financeiro', label:'Financeiro' }, { to:'/comissoes', label:'Comissões' }, { to:'/pedidos', label:'Pedidos' }, { to:'/ponto', label:'Ponto' }]
+  const title = [...visibleNav, { to:'/configuracoes', label:'Configurações' }, { to:'/financeiro', label:'Financeiro' }, { to:'/comissoes', label:'Comissões' }, { to:'/pedidos', label:'Pedidos' }, { to:'/ponto', label:'Ponto' }, { to:'/relatorios', label:'Relatórios' }, { to:'/rh', label:'RH' }]
     .find(n => ('exact' in n && n.exact) ? loc.pathname===n.to : loc.pathname.startsWith(n.to))?.label ?? 'ProspectCRM'
   const W = col ? 52 : 210
 

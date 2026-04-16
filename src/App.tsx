@@ -19,6 +19,8 @@ import Financeiro from './pages/Financeiro'
 import Comissoes from './pages/Comissoes'
 import Pedidos from './pages/Pedidos'
 import Ponto from './pages/Ponto'
+import Relatorios from './pages/Relatorios'
+import RH from './pages/RH'
 
 function Guard({ children }: { children: React.ReactNode }) {
   const { user, loading, permissionsReady } = useAuth()
@@ -52,6 +54,8 @@ function AppRoutes() {
         <Route path="comissoes" element={<Comissoes/>}/>
         <Route path="pedidos" element={<Pedidos/>}/>
         <Route path="ponto" element={<Ponto/>}/>
+        <Route path="relatorios" element={<Relatorios/>}/>
+        <Route path="rh" element={<RH/>}/>
       </Route>
       <Route path="*" element={<Navigate to="/" replace/>}/>
     </Routes>
